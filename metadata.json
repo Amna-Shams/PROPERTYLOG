@@ -1,0 +1,6 @@
+{
+  "name": "PROPERTYLOG",
+  "description": "A production-ready full-stack Property Management SaaS. Manage properties, tenants, leases, rent tracking, maintenance, and notifications with a luxury modern dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
