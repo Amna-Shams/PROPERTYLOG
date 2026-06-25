@@ -52,7 +52,12 @@ export const LeasesTab: React.FC = () => {
   const [pdfLease, setPdfLease] = useState<Lease | null>(null);
 
   // Filter leases
+  const isOwner = currentUser?.role === "Owner";
+  const myPropertyIds = isOwner ? properties.filter(p => p.owner_id === currentUser?.id).map(p => p.id) : [];
+
   const filteredLeases = leases.filter((l) => {
+    if (isOwner && !myPropertyIds.includes(l.property_id)) return false;
+    if (isTenant && l.tenant_id !== currentUser?.id) return false;
     const matchesSearch = l.tenant_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           l.property_name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === "all" || l.status === statusFilter;
@@ -60,7 +65,7 @@ export const LeasesTab: React.FC = () => {
   });
 
   // Calculate upcoming expirations (expiring in 30 days)
-  const expiringSoonLeases = leases.filter((l) => {
+  const expiringSoonLeases = filteredLeases.filter((l) => {
     if (l.status !== LeaseStatus.ACTIVE) return false;
     const end = new Date(l.end_date);
     const today = new Date();

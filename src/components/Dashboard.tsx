@@ -59,6 +59,9 @@ import { LeasesTab } from "./LeasesTab";
 import { RentTab } from "./RentTab";
 import { MaintenanceTab } from "./MaintenanceTab";
 import { ReportsTab } from "./ReportsTab";
+import { OverviewTab } from "./OverviewTab";
+import { UsersTab } from "./UsersTab";
+import { SettingsTab } from "./SettingsTab";
 
 export const Dashboard: React.FC = () => {
   const {
@@ -82,7 +85,7 @@ export const Dashboard: React.FC = () => {
   } = useApp();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState<"overview" | "properties" | "units" | "tenants" | "leases" | "payments" | "maintenance" | "reports">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "properties" | "units" | "tenants" | "leases" | "payments" | "maintenance" | "reports" | "users" | "settings">("overview");
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
 
@@ -132,6 +135,8 @@ export const Dashboard: React.FC = () => {
   // Filter lists based on role
   // Tenants only see their own tickets, leases, payments
   const isTenant = currentUser.role === UserRole.TENANT;
+  const isOwner = currentUser.role === UserRole.OWNER;
+  const isAdmin = currentUser.role === UserRole.ADMIN;
   
   // Simulated tenant key mapping
   // Since Jane Doe is tenant 't1' in our mock data:
@@ -143,44 +148,8 @@ export const Dashboard: React.FC = () => {
     ? units.filter((u) => u.tenant_id === activeTenantId)
     : units;
 
-  const filteredLeases = isTenant
-    ? leases.filter((l) => l.tenant_id === activeTenantId)
-    : leases;
-
-  const filteredTickets = isTenant
-    ? tickets.filter((t) => t.tenant_id === activeTenantId)
-    : tickets;
-
-  const filteredPayments = isTenant
-    ? payments.filter((p) => p.tenant_id === activeTenantId)
-    : payments;
-
   const filteredNotifications = notifications.filter((n) => n.user_id === currentUser.id || n.user_id === "all");
-
   const unreadNotificationsCount = filteredNotifications.filter((n) => !n.is_read).length;
-
-  // Overview aggregations (for owners/admins vs. tenants)
-  const totalProperties = properties.length;
-  const occupiedUnits = units.filter((u) => u.status === UnitStatus.OCCUPIED).length;
-  const vacantUnits = units.filter((u) => u.status === UnitStatus.VACANT).length;
-  
-  const activeTenantsCount = leases.filter((l) => l.status === LeaseStatus.ACTIVE).length;
-  
-  const totalRentBilledThisMonth = payments
-    .filter((p) => p.due_date.startsWith("2026-06"))
-    .reduce((sum, p) => sum + p.amount, 0);
-
-  const totalRentCollectedThisMonth = payments
-    .filter((p) => p.due_date.startsWith("2026-06") && p.status === PaymentStatus.PAID)
-    .reduce((sum, p) => sum + p.amount, 0);
-
-  const pendingDuesAmount = payments
-    .filter((p) => p.status === PaymentStatus.PENDING || p.status === PaymentStatus.OVERDUE)
-    .reduce((sum, p) => sum + p.amount, 0);
-
-  const activeMaintenanceTickets = tickets.filter(
-    (t) => t.status === TicketStatus.OPEN || t.status === TicketStatus.IN_PROGRESS
-  ).length;
 
   // Submission Handlers
   const handleAddPropertySubmit = (e: React.FormEvent) => {
@@ -345,30 +314,34 @@ export const Dashboard: React.FC = () => {
             </button>
 
             {/* Properties */}
-            <button
-              onClick={() => setActiveTab("properties")}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
-                activeTab === "properties"
-                  ? "bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-sm"
-                  : "border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-white"
-              }`}
-            >
-              <Building2 className="h-4.5 w-4.5" />
-              {sidebarOpen && <span>Properties Suite</span>}
-            </button>
+            {!isTenant && (
+              <button
+                onClick={() => setActiveTab("properties")}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
+                  activeTab === "properties"
+                    ? "bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-sm"
+                    : "border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-white"
+                }`}
+              >
+                <Building2 className="h-4.5 w-4.5" />
+                {sidebarOpen && <span>Properties Suite</span>}
+              </button>
+            )}
 
             {/* Units Inventory */}
-            <button
-              onClick={() => setActiveTab("units")}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
-                activeTab === "units"
-                  ? "bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-sm"
-                  : "border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-white"
-              }`}
-            >
-              <Layers className="h-4.5 w-4.5" />
-              {sidebarOpen && <span>Units Inventory</span>}
-            </button>
+            {!isTenant && (
+              <button
+                onClick={() => setActiveTab("units")}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
+                  activeTab === "units"
+                    ? "bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-sm"
+                    : "border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-white"
+                }`}
+              >
+                <Layers className="h-4.5 w-4.5" />
+                {sidebarOpen && <span>Units Inventory</span>}
+              </button>
+            )}
 
             {/* Tenants Directory (Hidden for Tenants) */}
             {!isTenant && (
@@ -425,17 +398,49 @@ export const Dashboard: React.FC = () => {
             </button>
 
             {/* Reports & Analytics */}
-            <button
-              onClick={() => setActiveTab("reports")}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
-                activeTab === "reports"
-                  ? "bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-sm"
-                  : "border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-white"
-              }`}
-            >
-              <FileSpreadsheet className="h-4.5 w-4.5" />
-              {sidebarOpen && <span>Reports &amp; Analytics</span>}
-            </button>
+            {!isTenant && (
+              <button
+                onClick={() => setActiveTab("reports")}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
+                  activeTab === "reports"
+                    ? "bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-sm"
+                    : "border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-white"
+                }`}
+              >
+                <FileSpreadsheet className="h-4.5 w-4.5" />
+                {sidebarOpen && <span>Reports &amp; Analytics</span>}
+              </button>
+            )}
+
+            {/* Admin Users */}
+            {isAdmin && (
+              <button
+                onClick={() => setActiveTab("users")}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
+                  activeTab === "users"
+                    ? "bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-sm"
+                    : "border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-white"
+                }`}
+              >
+                <Users className="h-4.5 w-4.5" />
+                {sidebarOpen && <span>User Management</span>}
+              </button>
+            )}
+
+            {/* Admin Settings */}
+            {isAdmin && (
+              <button
+                onClick={() => setActiveTab("settings")}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
+                  activeTab === "settings"
+                    ? "bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-sm"
+                    : "border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-white"
+                }`}
+              >
+                <Wrench className="h-4.5 w-4.5" />
+                {sidebarOpen && <span>System Settings</span>}
+              </button>
+            )}
 
             {/* Secure Inbox Link */}
             <button
@@ -657,254 +662,14 @@ export const Dashboard: React.FC = () => {
           {/* =========================================================================
               TAB: OVERVIEW
               ========================================================================= */}
-          {activeTab === "overview" && (
-            <div className="space-y-6 animate-fade-in">
-              
-              {/* Stat Cards Row */}
-              <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
-                
-                {/* Stat 1: Properties */}
-                <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm flex items-center gap-3 transition-all hover:border-slate-300">
-                  <div className="h-9 w-9 bg-blue-50 text-blue-600 border border-blue-100 rounded-lg flex items-center justify-center shrink-0">
-                    <Building2 className="h-4.5 w-4.5" />
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Properties</div>
-                    <div className="text-base font-extrabold font-display text-slate-950">{totalProperties}</div>
-                  </div>
-                </div>
-
-                {/* Stat 2: Occupied Units */}
-                <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm flex items-center gap-3 transition-all hover:border-slate-300">
-                  <div className="h-9 w-9 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-lg flex items-center justify-center shrink-0">
-                    <CheckCircle2 className="h-4.5 w-4.5" />
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Occupied</div>
-                    <div className="text-base font-extrabold font-display text-slate-950">
-                      {occupiedUnits}/{units.length}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Stat 3: Active Tenants */}
-                <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm flex items-center gap-3 transition-all hover:border-slate-300">
-                  <div className="h-9 w-9 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-lg flex items-center justify-center shrink-0">
-                    <Users className="h-4.5 w-4.5" />
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Tenants</div>
-                    <div className="text-base font-extrabold font-display text-slate-950">{activeTenantsCount}</div>
-                  </div>
-                </div>
-
-                {/* Stat 4: Billed Rent / Collected */}
-                <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm flex items-center gap-3 transition-all hover:border-slate-300">
-                  <div className="h-9 w-9 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-lg flex items-center justify-center shrink-0">
-                    <DollarSign className="h-4.5 w-4.5" />
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Collections</div>
-                    <div className="text-base font-extrabold font-display text-slate-950">
-                      ${totalRentCollectedThisMonth.toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Stat 5: Outstanding / Pending */}
-                <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm flex items-center gap-3 transition-all hover:border-slate-300">
-                  <div className="h-9 w-9 bg-amber-50 text-amber-600 border border-amber-100 rounded-lg flex items-center justify-center shrink-0">
-                    <AlertTriangle className="h-4.5 w-4.5" />
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Pending</div>
-                    <div className="text-base font-extrabold font-display text-slate-950">
-                      ${pendingDuesAmount.toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Stat 6: Active Tickets */}
-                <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm flex items-center gap-3 transition-all hover:border-slate-300">
-                  <div className="h-9 w-9 bg-rose-50 text-rose-600 border border-rose-100 rounded-lg flex items-center justify-center shrink-0">
-                    <Wrench className="h-4.5 w-4.5" />
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Tickets</div>
-                    <div className="text-base font-extrabold font-display text-slate-950">{activeMaintenanceTickets}</div>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Charts &amp; Analytics Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                
-                {/* Left Panel: Rent collection chart mockup */}
-                <div className="lg:col-span-8 bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-50 pb-3">
-                    <div>
-                      <h3 className="font-display font-bold text-slate-900 text-sm md:text-base">Monthly Rent Collection (June 2026)</h3>
-                      <p className="text-xs text-slate-400">Total rent collection rate for June</p>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-extrabold text-emerald-600">
-                        {totalRentBilledThisMonth > 0 
-                          ? Math.round((totalRentCollectedThisMonth / totalRentBilledThisMonth) * 100) 
-                          : 80}%
-                      </div>
-                      <div className="text-[10px] text-slate-400">Collection rate</div>
-                    </div>
-                  </div>
-
-                  {/* SVG Bar Chart representing June Rent statuses */}
-                  <div className="h-44 w-full flex items-end gap-4 md:gap-8 pt-4">
-                    {payments.filter(p => p.due_date.startsWith("2026-06")).map((pay, i) => {
-                      const isPaid = pay.status === PaymentStatus.PAID;
-                      const barColor = isPaid ? "bg-emerald-500" : "bg-amber-500";
-                      return (
-                        <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                          <div className="w-full bg-slate-100 h-24 rounded-lg relative overflow-hidden flex items-end">
-                            <div className={`${barColor} w-full`} style={{ height: `${isPaid ? "100%" : "50%"}` }} />
-                          </div>
-                          <div className="text-[10px] font-bold text-slate-600 truncate max-w-[60px] text-center">
-                            {pay.tenant_name.split(" ")[0]}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Right Panel: Operations expenses &amp; unit stats */}
-                <div className="lg:col-span-4 bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
-                  <h3 className="font-display font-bold text-slate-900 text-sm md:text-base">Operations Allocation</h3>
-                  
-                  <div className="space-y-3 pt-2">
-                    
-                    {/* Allocation item 1 */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-semibold text-slate-600">Maintenance &amp; Repairs</span>
-                        <span className="text-slate-500 font-mono">45%</span>
-                      </div>
-                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                        <div className="bg-rose-500 h-full rounded-full" style={{ width: "45%" }} />
-                      </div>
-                    </div>
-
-                    {/* Allocation item 2 */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-semibold text-slate-600">Utility Allocations</span>
-                        <span className="text-slate-500 font-mono">30%</span>
-                      </div>
-                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                        <div className="bg-blue-500 h-full rounded-full" style={{ width: "30%" }} />
-                      </div>
-                    </div>
-
-                    {/* Allocation item 3 */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-semibold text-slate-600">Staff &amp; Operations</span>
-                        <span className="text-slate-500 font-mono">25%</span>
-                      </div>
-                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                        <div className="bg-indigo-500 h-full rounded-full" style={{ width: "25%" }} />
-                      </div>
-                    </div>
-
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Bottom Widgets Row: Recent Activity &amp; Upcoming Leases */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                
-                {/* Recent Tickets Activity feed */}
-                <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <h3 className="font-display font-bold text-slate-950 text-xs md:text-sm">Active Maintenance Feed</h3>
-                    <button onClick={() => setActiveTab("maintenance")} className="text-[10px] font-bold text-blue-600 hover:underline">Manage All</button>
-                  </div>
-
-                  <div className="space-y-2.5">
-                    {filteredTickets.slice(0, 3).map((t) => (
-                      <div key={t.id} className="p-3 bg-slate-50/50 rounded-lg border border-slate-200 flex items-stretch gap-3 hover:border-slate-300 transition-colors">
-                        <div className={`w-1 shrink-0 rounded-full ${
-                          t.priority === TicketPriority.URGENT 
-                            ? "bg-rose-500" 
-                            : t.priority === TicketPriority.HIGH
-                            ? "bg-amber-500"
-                            : "bg-blue-500"
-                        }`} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="text-xs font-bold text-slate-900 truncate">{t.title}</div>
-                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase border ${
-                              t.priority === TicketPriority.URGENT
-                                ? "bg-rose-50 text-rose-600 border-rose-100"
-                                : t.priority === TicketPriority.HIGH
-                                ? "bg-amber-50 text-amber-600 border-amber-100"
-                                : "bg-blue-50 text-blue-600 border-blue-100"
-                            }`}>{t.priority}</span>
-                          </div>
-                          <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{t.description}</p>
-                          <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1.5">
-                            <span>{t.property_name} Unit {t.unit_number}</span>
-                            <span>&bull;</span>
-                            <span className="font-bold text-slate-500 uppercase text-[9px]">{t.status}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Upcoming Leases Expiring warnings */}
-                <div className="lg:col-span-5 bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <h3 className="font-display font-bold text-slate-950 text-xs md:text-sm">Upcoming Leases</h3>
-                    {!isTenant && (
-                      <button onClick={() => setActiveTab("leases")} className="text-[10px] font-bold text-blue-600 hover:underline">View All</button>
-                    )}
-                  </div>
-
-                  <div className="space-y-2.5">
-                    {filteredLeases.map((l) => (
-                      <div key={l.id} className="p-3 bg-slate-50/50 rounded-lg border border-slate-200 flex items-center justify-between hover:border-slate-300 transition-colors">
-                        <div>
-                          <div className="text-xs font-bold text-slate-900">{l.tenant_name}</div>
-                          <div className="text-[10px] text-slate-500 mt-0.5">{l.property_name} &bull; Unit {l.unit_number}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-[10px] font-bold text-slate-700">Expires {l.end_date}</div>
-                          <span className={`inline-block text-[9px] font-bold px-2 py-0.5 rounded-full mt-1 ${
-                            l.status === LeaseStatus.EXPIRING 
-                              ? "bg-rose-500/10 text-rose-500 border border-rose-100/20" 
-                              : "bg-blue-500/10 text-blue-500 border border-blue-100/20"
-                          }`}>
-                            {l.status}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-
-            </div>
-          )}
+          {activeTab === "overview" && <OverviewTab />}
 
           {/* =========================================================================
               MODULAR SAAS TABS
               ========================================================================= */}
-          {activeTab === "properties" && <PropertiesTab />}
-          {activeTab === "units" && <UnitsTab />}
-          {activeTab === "tenants" && <TenantsTab />}
+          {activeTab === "properties" && !isTenant && <PropertiesTab />}
+          {activeTab === "units" && !isTenant && <UnitsTab />}
+          {activeTab === "tenants" && !isTenant && <TenantsTab />}
 
           {/* =========================================================================
               TAB: LEASES & TENANTS
@@ -924,7 +689,13 @@ export const Dashboard: React.FC = () => {
           {/* =========================================================================
               TAB: REPORTS & ANALYTICS
               ========================================================================= */}
-          {activeTab === "reports" && <ReportsTab />}
+          {activeTab === "reports" && !isTenant && <ReportsTab />}
+          
+          {/* =========================================================================
+              ADMIN EXCLUSIVE TABS
+              ========================================================================= */}
+          {activeTab === "users" && isAdmin && <UsersTab />}
+          {activeTab === "settings" && isAdmin && <SettingsTab />}
 
         </div>
       </main>

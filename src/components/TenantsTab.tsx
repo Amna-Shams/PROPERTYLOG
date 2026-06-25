@@ -28,7 +28,9 @@ export const TenantsTab: React.FC = () => {
     updateTenant, 
     deleteTenant, 
     currentUser, 
-    showToast 
+    showToast,
+    properties,
+    leases
   } = useApp();
 
   const isTenant = currentUser?.role === "Tenant";
@@ -63,11 +65,16 @@ export const TenantsTab: React.FC = () => {
   const agreementInputRef = useRef<HTMLInputElement>(null);
 
   // Filter tenants
-  const filteredTenants = tenants.filter((t) => 
-    t.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  const isOwner = currentUser?.role === "Owner";
+  const myPropertyIds = isOwner ? properties.filter(p => p.owner_id === currentUser?.id).map(p => p.id) : [];
+  const myTenantIds = isOwner ? leases.filter(l => myPropertyIds.includes(l.property_id)).map(l => l.tenant_id) : [];
+
+  const filteredTenants = tenants.filter((t) => {
+    if (isOwner && !myTenantIds.includes(t.id)) return false;
+    return t.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.cnic.includes(searchQuery)
-  );
+    t.cnic.includes(searchQuery);
+  });
 
   // Read files and convert to base64
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, docType: "cnic" | "passport" | "agreement") => {

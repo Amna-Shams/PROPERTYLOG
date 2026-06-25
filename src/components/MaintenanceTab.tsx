@@ -28,7 +28,8 @@ export const MaintenanceTab: React.FC = () => {
     updateTicketStatus, 
     updateTicketCost, 
     currentUser, 
-    showToast 
+    showToast,
+    properties
   } = useApp();
 
   const isTenant = currentUser?.role === "Tenant";
@@ -57,9 +58,14 @@ export const MaintenanceTab: React.FC = () => {
   const [modCost, setModCost] = useState<number>(0);
 
   // Filter tickets
+  const isOwner = currentUser?.role === "Owner";
+  const myPropertyIds = isOwner ? properties.filter(p => p.owner_id === currentUser?.id).map(p => p.id) : [];
+
   const filteredTickets = tickets.filter((t) => {
+    if (isOwner && !myPropertyIds.includes(t.property_id)) return false;
+    
     // If tenant, they only see their own tickets!
-    const matchesUser = !isTenant || t.tenant_name.toLowerCase() === currentUser?.name.toLowerCase();
+    const matchesUser = !isTenant || t.tenant_id === currentUser?.id;
     
     const matchesSearch = t.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           t.property_name.toLowerCase().includes(searchQuery.toLowerCase()) ||

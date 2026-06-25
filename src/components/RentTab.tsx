@@ -29,7 +29,8 @@ export const RentTab: React.FC = () => {
     deletePayment, 
     markPaymentPaid, 
     currentUser, 
-    showToast 
+    showToast,
+    properties
   } = useApp();
 
   const isTenant = currentUser?.role === "Tenant";
@@ -57,9 +58,20 @@ export const RentTab: React.FC = () => {
   const [receiptPdf, setReceiptPdf] = useState<RentPayment | null>(null);
 
   // Filtering payments
+  const isOwner = currentUser?.role === "Owner";
+  const myPropertyIds = isOwner ? properties.filter(p => p.owner_id === currentUser?.id).map(p => p.id) : [];
+
   const filteredPayments = payments.filter((p) => {
+    if (isOwner) {
+      // Find the lease for this payment to get the property ID
+      const paymentLease = leases.find(l => l.tenant_id === p.tenant_id && l.unit_id === p.unit_id);
+      if (paymentLease && !myPropertyIds.includes(paymentLease.property_id)) return false;
+      // In case we can't find lease, check property_name match with properties
+      if (!paymentLease && !properties.some(prop => prop.owner_id === currentUser?.id && prop.name === p.property_name)) return false;
+    }
+    
     // If tenant, they only see their own rent history!
-    const matchesUser = !isTenant || p.tenant_name.toLowerCase() === currentUser?.name.toLowerCase();
+    const matchesUser = !isTenant || p.tenant_id === currentUser?.id;
     
     const matchesSearch = p.tenant_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           p.property_name.toLowerCase().includes(searchQuery.toLowerCase());

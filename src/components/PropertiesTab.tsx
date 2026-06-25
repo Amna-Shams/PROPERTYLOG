@@ -74,7 +74,10 @@ export const PropertiesTab: React.FC = () => {
   const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Filter properties based on search & type
+  const isOwner = currentUser?.role === "Owner";
+  
   const filteredProperties = properties.filter((p) => {
+    if (isOwner && p.owner_id !== currentUser?.id) return false;
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           p.address.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = typeFilter === "all" || p.type === typeFilter;

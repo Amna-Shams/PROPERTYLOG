@@ -37,6 +37,9 @@ export const ReportsTab: React.FC = () => {
   const { payments, tickets, properties, units, currentUser, showToast } = useApp();
 
   const isTenant = currentUser?.role === "Tenant";
+  const isOwner = currentUser?.role === "Owner";
+  const myPropertyIds = isOwner ? properties.filter(p => p.owner_id === currentUser?.id).map(p => p.id) : [];
+  const selectableProperties = isOwner ? properties.filter(p => p.owner_id === currentUser?.id) : properties;
 
   // Filter States
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
@@ -48,8 +51,13 @@ export const ReportsTab: React.FC = () => {
 
   // Filter payments and tickets based on selected property & date range
   const filteredPayments = payments.filter((p) => {
+    if (isOwner) {
+      // Find property ID by name
+      const propId = properties.find(prop => prop.name === p.property_name)?.id;
+      if (propId && !myPropertyIds.includes(propId)) return false;
+    }
     // If tenant, they can only report on their own payments
-    const matchesUser = !isTenant || p.tenant_name.toLowerCase() === currentUser?.name.toLowerCase();
+    const matchesUser = !isTenant || p.tenant_id === currentUser?.id;
     const matchesProp = selectedPropertyId === "all" || p.property_name === properties.find(prop => prop.id === selectedPropertyId)?.name;
     const paymentDate = p.paid_date || p.due_date;
     const matchesDate = paymentDate >= startDate && paymentDate <= endDate;
@@ -57,7 +65,8 @@ export const ReportsTab: React.FC = () => {
   });
 
   const filteredTickets = tickets.filter((t) => {
-    const matchesUser = !isTenant || t.tenant_name.toLowerCase() === currentUser?.name.toLowerCase();
+    if (isOwner && !myPropertyIds.includes(t.property_id)) return false;
+    const matchesUser = !isTenant || t.tenant_id === currentUser?.id;
     const matchesProp = selectedPropertyId === "all" || t.property_id === selectedPropertyId;
     const ticketDate = t.created_at.split("T")[0];
     const matchesDate = ticketDate >= startDate && ticketDate <= endDate;
@@ -141,7 +150,7 @@ export const ReportsTab: React.FC = () => {
                 className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none font-semibold text-slate-900"
               >
                 <option value="all">All Properties Combined</option>
-                {properties.map(p => (
+                {selectableProperties.map(p => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>

@@ -47,7 +47,12 @@ export const UnitsTab: React.FC = () => {
   const [formStatus, setFormStatus] = useState<UnitStatus>(UnitStatus.AVAILABLE);
 
   // Filter computation
+  const isOwner = currentUser?.role === "Owner";
+  const myPropertyIds = isOwner ? properties.filter(p => p.owner_id === currentUser?.id).map(p => p.id) : [];
+  const selectableProperties = isOwner ? properties.filter(p => p.owner_id === currentUser?.id) : properties;
+
   const filteredUnits = units.filter((u) => {
+    if (isOwner && !myPropertyIds.includes(u.property_id)) return false;
     const matchesSearch = u.unit_number.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           u.property_name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === "all" || u.status === statusFilter;
@@ -173,7 +178,7 @@ export const UnitsTab: React.FC = () => {
               className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none text-xs"
             >
               <option value="all">All Properties</option>
-              {properties.map(p => (
+              {selectableProperties.map(p => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
@@ -344,7 +349,7 @@ export const UnitsTab: React.FC = () => {
                     disabled={view === "edit"}
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none font-bold"
                   >
-                    {properties.map(p => (
+                    {selectableProperties.map(p => (
                       <option key={p.id} value={p.id}>{p.name} ({p.type})</option>
                     ))}
                   </select>
