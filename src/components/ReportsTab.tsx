@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { PaymentStatus, TicketStatus } from "../types";
+import { formatPKR } from "../utils/currency";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -32,6 +33,7 @@ import {
   Cell 
 } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
+
 
 export const ReportsTab: React.FC = () => {
   const { payments, tickets, properties, units, currentUser, showToast } = useApp();
@@ -201,7 +203,7 @@ export const ReportsTab: React.FC = () => {
         <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm relative overflow-hidden flex flex-col justify-between">
           <div className="space-y-1">
             <span className="text-[10px] text-green-500 font-bold uppercase tracking-wider">Rent Collected</span>
-            <p className="font-mono font-extrabold text-2xl text-green-600">${totalCollectedWithPartial.toLocaleString()}</p>
+            <p className="font-mono font-extrabold text-2xl text-green-600">{formatPKR(totalCollectedWithPartial)}</p>
           </div>
           <div className="text-[10px] text-slate-400 mt-2 font-mono flex items-center gap-1">
             <TrendingUp className="h-3.5 w-3.5 text-green-500" />
@@ -213,7 +215,7 @@ export const ReportsTab: React.FC = () => {
         <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm relative overflow-hidden flex flex-col justify-between">
           <div className="space-y-1">
             <span className="text-[10px] text-rose-500 font-bold uppercase tracking-wider">Pending / Unpaid Dues</span>
-            <p className="font-mono font-extrabold text-2xl text-rose-600">${totalOutstanding.toLocaleString()}</p>
+            <p className="font-mono font-extrabold text-2xl text-rose-600">{formatPKR(totalOutstanding)}</p>
           </div>
           <div className="text-[10px] text-slate-400 mt-2 font-mono">
             <span>Outstanding invoice lines: {filteredPayments.filter(p => p.status !== PaymentStatus.PAID).length} items</span>
@@ -224,7 +226,7 @@ export const ReportsTab: React.FC = () => {
         <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm relative overflow-hidden flex flex-col justify-between">
           <div className="space-y-1">
             <span className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">Maintenance Costs</span>
-            <p className="font-mono font-extrabold text-2xl text-amber-600">${totalMaintenanceExpense.toLocaleString()}</p>
+            <p className="font-mono font-extrabold text-2xl text-amber-600">{formatPKR(totalMaintenanceExpense)}</p>
           </div>
           <div className="text-[10px] text-slate-400 mt-2 font-mono">
             <span>Completed repair tickets: {filteredTickets.length} tasks</span>
@@ -235,7 +237,7 @@ export const ReportsTab: React.FC = () => {
         <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm relative overflow-hidden flex flex-col justify-between">
           <div className="space-y-1">
             <span className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider">Net profit margin</span>
-            <p className="font-mono font-extrabold text-2xl text-indigo-600">${netIncome.toLocaleString()}</p>
+            <p className="font-mono font-extrabold text-2xl text-indigo-600">{formatPKR(netIncome)}</p>
           </div>
           <div className="text-[10px] text-slate-400 mt-2 font-mono flex items-center gap-1">
             <Activity className="h-3.5 w-3.5 text-indigo-500" />
@@ -321,14 +323,14 @@ export const ReportsTab: React.FC = () => {
                 <span className="h-2 w-2 rounded-full bg-emerald-500" />
                 Collected Rent
               </span>
-              <span className="font-bold text-slate-800 font-mono">${totalCollectedWithPartial.toLocaleString()}</span>
+              <span className="font-bold text-slate-800 font-mono">{formatPKR(totalCollectedWithPartial)}</span>
             </div>
             <div className="flex justify-between items-center text-[10px]">
               <span className="flex items-center gap-1.5 text-slate-500">
                 <span className="h-2 w-2 rounded-full bg-rose-500" />
                 Delinquent Dues
               </span>
-              <span className="font-bold text-slate-800 font-mono">${totalOutstanding.toLocaleString()}</span>
+              <span className="font-bold text-slate-800 font-mono">{formatPKR(totalOutstanding)}</span>
             </div>
           </div>
         </div>
@@ -361,7 +363,7 @@ export const ReportsTab: React.FC = () => {
                   <td className="p-3 text-emerald-600 font-bold">Revenue</td>
                   <td className="p-3 font-mono">{p.paid_date || p.due_date}</td>
                   <td className="p-3 font-mono text-slate-400">—</td>
-                  <td className="p-3 font-mono text-green-600 font-bold">${p.amount}</td>
+                  <td className="p-3 font-mono text-green-600 font-bold">{formatPKR(p.amount)}</td>
                   <td className="p-3 text-right">
                     <span className="px-1.5 py-0.5 rounded bg-green-50 text-green-700 text-[9px] font-bold border border-green-100">{p.status}</span>
                   </td>
@@ -372,7 +374,7 @@ export const ReportsTab: React.FC = () => {
                   <td className="p-3 font-bold text-slate-900">Repair: {t.title} (Unit {t.unit_number})</td>
                   <td className="p-3 text-amber-600 font-bold">Expense</td>
                   <td className="p-3 font-mono">{t.created_at.split("T")[0]}</td>
-                  <td className="p-3 font-mono text-amber-600 font-bold">${t.cost}</td>
+                  <td className="p-3 font-mono text-amber-600 font-bold">{formatPKR(t.cost)}</td>
                   <td className="p-3 font-mono text-slate-400">—</td>
                   <td className="p-3 text-right">
                     <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[9px] font-bold border border-amber-100">Disbursed</span>
@@ -418,19 +420,19 @@ export const ReportsTab: React.FC = () => {
                 <div className="grid grid-cols-4 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl text-center font-mono">
                   <div>
                     <p className="text-[9px] text-slate-400 font-bold uppercase">Revenue Collected</p>
-                    <p className="font-black text-green-600 text-sm mt-1">${totalCollectedWithPartial}</p>
+                    <p className="font-black text-green-600 text-sm mt-1">{formatPKR(totalCollectedWithPartial)}</p>
                   </div>
                   <div>
                     <p className="text-[9px] text-slate-400 font-bold uppercase">Pending dues</p>
-                    <p className="font-black text-rose-600 text-sm mt-1">${totalOutstanding}</p>
+                    <p className="font-black text-rose-600 text-sm mt-1">{formatPKR(totalOutstanding)}</p>
                   </div>
                   <div>
                     <p className="text-[9px] text-slate-400 font-bold uppercase">Expenses Disbursed</p>
-                    <p className="font-black text-amber-600 text-sm mt-1">${totalMaintenanceExpense}</p>
+                    <p className="font-black text-amber-600 text-sm mt-1">{formatPKR(totalMaintenanceExpense)}</p>
                   </div>
                   <div>
                     <p className="text-[9px] text-slate-400 font-bold uppercase">Net Profit Margin</p>
-                    <p className="font-black text-indigo-600 text-sm mt-1">${netIncome}</p>
+                    <p className="font-black text-indigo-600 text-sm mt-1">{formatPKR(netIncome)}</p>
                   </div>
                 </div>
 
@@ -438,7 +440,7 @@ export const ReportsTab: React.FC = () => {
                 <div className="space-y-2">
                   <h4 className="font-bold text-slate-950 text-xs">Summary of Operations</h4>
                   <p className="text-slate-500 text-[10px]">
-                    This certified financial summary encompasses rental asset revenues and repair expenses registered in the PROPERTYLOG ledger under active scopes. Under audit parameters, total verified collections amount to <strong className="text-slate-900">${totalCollectedWithPartial}</strong> with outstanding tenant balances of <strong className="text-slate-900">${totalOutstanding}</strong>.
+                    This certified financial summary encompasses rental asset revenues and repair expenses registered in the PROPERTYLOG ledger under active scopes. Under audit parameters, total verified collections amount to <strong className="text-slate-900">{formatPKR(totalCollectedWithPartial)}</strong> with outstanding tenant balances of <strong className="text-slate-900">{formatPKR(totalOutstanding)}</strong>.
                   </p>
                 </div>
 
@@ -457,18 +459,18 @@ export const ReportsTab: React.FC = () => {
                         <td className="p-2 font-bold">Total Rental Collections</td>
                         <td className="p-2">REV-RENTAL</td>
                         <td className="p-2 text-right text-slate-400">—</td>
-                        <td className="p-2 text-right text-green-700 font-bold">${totalCollectedWithPartial}</td>
+                        <td className="p-2 text-right text-green-700 font-bold">{formatPKR(totalCollectedWithPartial)}</td>
                       </tr>
                       <tr>
                         <td className="p-2 font-bold">Maintenance repairs &amp; fixes</td>
                         <td className="p-2">EXP-MAINTENANCE</td>
-                        <td className="p-2 text-right text-amber-700 font-bold">${totalMaintenanceExpense}</td>
+                        <td className="p-2 text-right text-amber-700 font-bold">{formatPKR(totalMaintenanceExpense)}</td>
                         <td className="p-2 text-right text-slate-400">—</td>
                       </tr>
                       <tr className="bg-slate-50 font-black text-[10px] border-t-2 border-slate-800">
                         <td className="p-2" colSpan={2}>Net Financial Position</td>
                         <td className="p-2 text-right" colSpan={2}>
-                          <span className={netIncome >= 0 ? "text-green-700" : "text-rose-700"}>${netIncome} USD</span>
+                          <span className={netIncome >= 0 ? "text-green-700" : "text-rose-700"}>{formatPKR(netIncome)}</span>
                         </td>
                       </tr>
                     </tbody>

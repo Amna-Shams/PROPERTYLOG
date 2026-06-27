@@ -33,6 +33,7 @@ import {
   LayoutGrid,
   FileSpreadsheet
 } from "lucide-react";
+import { formatPKR } from "../utils/currency";
 import { useApp } from "../context/AppContext";
 import { 
   UserRole, 
@@ -59,7 +60,10 @@ import { LeasesTab } from "./LeasesTab";
 import { RentTab } from "./RentTab";
 import { MaintenanceTab } from "./MaintenanceTab";
 import { ReportsTab } from "./ReportsTab";
+import { FinancialHubTab } from "./FinancialHubTab";
 import { OverviewTab } from "./OverviewTab";
+import { TenantPortal } from "./TenantPortal";
+import { PropertyManagerPortal } from "./PropertyManagerPortal";
 import { UsersTab } from "./UsersTab";
 import { SettingsTab } from "./SettingsTab";
 
@@ -85,9 +89,12 @@ export const Dashboard: React.FC = () => {
   } = useApp();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState<"overview" | "properties" | "units" | "tenants" | "leases" | "payments" | "maintenance" | "reports" | "users" | "settings">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "financial" | "properties" | "units" | "tenants" | "leases" | "payments" | "maintenance" | "reports" | "users" | "settings">("overview");
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+
+  // Impersonated role for Admin switcher
+  const [impersonatedRole, setImpersonatedRole] = useState<UserRole | "ALL" | null>(null);
 
   // Modal States
   const [showPropModal, setShowPropModal] = useState(false);
@@ -134,9 +141,10 @@ export const Dashboard: React.FC = () => {
 
   // Filter lists based on role
   // Tenants only see their own tickets, leases, payments
-  const isTenant = currentUser.role === UserRole.TENANT;
-  const isOwner = currentUser.role === UserRole.OWNER;
-  const isAdmin = currentUser.role === UserRole.ADMIN;
+  const isTenant = impersonatedRole === UserRole.TENANT || (currentUser.role === UserRole.TENANT && impersonatedRole === null);
+  const isOwner = impersonatedRole === UserRole.OWNER || (currentUser.role === UserRole.OWNER && impersonatedRole === null);
+  const isAdmin = currentUser.role === UserRole.ADMIN && (impersonatedRole === null || impersonatedRole === "ALL" || impersonatedRole === UserRole.ADMIN);
+  const isPropertyManager = impersonatedRole === UserRole.PROPERTY_MANAGER || (currentUser.role === UserRole.PROPERTY_MANAGER && impersonatedRole === null);
   
   // Simulated tenant key mapping
   // Since Jane Doe is tenant 't1' in our mock data:
@@ -267,8 +275,207 @@ export const Dashboard: React.FC = () => {
     });
   };
 
+  // Render switcher bar if real user is ADMIN
+  const renderAdminSwitcherBar = () => {
+    if (currentUser.role !== UserRole.ADMIN) return null;
+    return (
+      <div className="bg-slate-900 border-b border-slate-800 text-slate-100 py-3.5 px-6 flex flex-col md:flex-row items-center justify-between gap-4 sticky top-0 z-50 shadow-md">
+        <div className="flex items-center gap-2.5 shrink-0">
+          <Sparkles className="h-4.5 w-4.5 text-amber-400 animate-pulse" />
+          <span className="font-mono text-xs font-bold tracking-widest uppercase text-slate-300">
+            👑 SUPER_ADMIN <span className="text-amber-400">CONTROL</span>
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-[10px] font-extrabold uppercase font-mono">
+          {[
+            { id: "ALL", label: "📊 All Workspaces", bgActive: "bg-indigo-600 text-white" },
+            { id: null, label: "🛡️ Admin Portal", bgActive: "bg-blue-600 text-white" },
+            { id: UserRole.OWNER, label: "💼 Owner Portal", bgActive: "bg-amber-600 text-white" },
+            { id: UserRole.TENANT, label: "🏠 Tenant Portal", bgActive: "bg-emerald-600 text-white" },
+            { id: UserRole.PROPERTY_MANAGER, label: "⚡ Property Manager", bgActive: "bg-cyan-600 text-white" }
+          ].map((r) => {
+            const isActive = impersonatedRole === r.id;
+            return (
+              <button
+                key={String(r.id)}
+                onClick={() => {
+                  setImpersonatedRole(r.id as any);
+                  showToast(`Switched active view to: ${r.label}`, "info");
+                }}
+                className={`px-3 py-1.5 rounded-lg border transition-all ${
+                  isActive
+                    ? `${r.bgActive} border-transparent shadow-lg`
+                    : "bg-slate-800/80 border-slate-700/60 text-slate-400 hover:border-slate-500 hover:text-white"
+                }`}
+              >
+                {r.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // Switch layout if impersonating Tenant or Property Manager
+  if (currentUser.role === UserRole.ADMIN && impersonatedRole === UserRole.TENANT) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col">
+        {renderAdminSwitcherBar()}
+        <div className="flex-1 bg-slate-900">
+          <TenantPortal
+            currentUser={{ ...currentUser, role: UserRole.TENANT }}
+            onLogout={async () => {
+              setImpersonatedRole(null);
+            }}
+            onBrowseRentals={() => setImpersonatedRole(null)}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (currentUser.role === UserRole.ADMIN && impersonatedRole === UserRole.PROPERTY_MANAGER) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex flex-col">
+        {renderAdminSwitcherBar()}
+        <div className="flex-1">
+          <PropertyManagerPortal impersonatedByAdmin={true} />
+        </div>
+      </div>
+    );
+  }
+
+  if (currentUser.role === UserRole.ADMIN && impersonatedRole === "ALL") {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col text-slate-100">
+        {renderAdminSwitcherBar()}
+        
+        <div className="p-6 md:p-8 max-w-7xl mx-auto w-full space-y-8 flex-1">
+          
+          {/* Header */}
+          <div className="space-y-2">
+            <h2 className="text-2xl md:text-3xl font-extrabold font-mono uppercase tracking-tight text-white flex items-center gap-2">
+              <Sparkles className="h-8 w-8 text-indigo-400 animate-pulse" /> Multi-Portal Control Center
+            </h2>
+            <p className="text-slate-400 text-xs md:text-sm font-semibold max-w-2xl">
+              Simulate and monitor all active workspaces of the Multi-Portal Property Management System. Click any workspace card to view or impersonate that portal instantly.
+            </p>
+          </div>
+
+          {/* 4 Workspace Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            
+            {/* CARD 1: ADMIN PORTAL */}
+            <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-3xl flex flex-col justify-between hover:border-slate-700 transition-all shadow-xl group">
+              <div className="space-y-4">
+                <div className="h-12 w-12 rounded-2xl bg-blue-500/10 text-blue-400 flex items-center justify-center font-bold text-lg font-mono">
+                  AD
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-white text-base">Admin Workspace</h3>
+                  <p className="text-xs text-slate-400 mt-1">Full administrative control. Create users, assign role categories, configure global app settings, and view logs.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setImpersonatedRole(null)}
+                className="mt-6 w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs rounded-xl uppercase tracking-wider transition-all"
+              >
+                Access Admin Workspace
+              </button>
+            </div>
+
+            {/* CARD 2: OWNER PORTAL */}
+            <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-3xl flex flex-col justify-between hover:border-slate-700 transition-all shadow-xl group">
+              <div className="space-y-4">
+                <div className="h-12 w-12 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold text-lg font-mono">
+                  OW
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-white text-base">Owner Workspace</h3>
+                  <p className="text-xs text-slate-400 mt-1">Financial overview for property owners. Review asset valuations, direct payouts, delinquency metrics, and reports.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setImpersonatedRole(UserRole.OWNER)}
+                className="mt-6 w-full py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-xs rounded-xl uppercase tracking-wider transition-all"
+              >
+                Access Owner Workspace
+              </button>
+            </div>
+
+            {/* CARD 3: TENANT PORTAL */}
+            <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-3xl flex flex-col justify-between hover:border-slate-700 transition-all shadow-xl group">
+              <div className="space-y-4">
+                <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold text-lg font-mono">
+                  TE
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-white text-base">Tenant Workspace</h3>
+                  <p className="text-xs text-slate-400 mt-1">Tenant portal for renters. Pay monthly rents via simulated Stripe, submit maintenance tickets, and download leases.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setImpersonatedRole(UserRole.TENANT)}
+                className="mt-6 w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl uppercase tracking-wider transition-all"
+              >
+                Access Tenant Workspace
+              </button>
+            </div>
+
+            {/* CARD 4: PROPERTY MANAGER PORTAL */}
+            <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-3xl flex flex-col justify-between hover:border-slate-700 transition-all shadow-xl group">
+              <div className="space-y-4">
+                <div className="h-12 w-12 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center font-bold text-lg font-mono">
+                  PM
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-white text-base">Property Manager Workspace</h3>
+                  <p className="text-xs text-slate-400 mt-1">Manage multiple properties, record tenant rent invoices, dispatch contractor tasks, and send broadcast announcements.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setImpersonatedRole(UserRole.PROPERTY_MANAGER)}
+                className="mt-6 w-full py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold text-xs rounded-xl uppercase tracking-wider transition-all"
+              >
+                Access Manager Workspace
+              </button>
+            </div>
+
+          </div>
+
+          {/* Master high-level status indicator stats block */}
+          <div className="bg-slate-900/30 border border-slate-800 p-6 rounded-3xl space-y-4">
+            <h3 className="font-bold text-white text-sm uppercase font-mono tracking-wider">System-Wide Aggregated Operations</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/40">
+                <span className="text-[10px] font-bold text-slate-500 uppercase block">Active Tenants</span>
+                <span className="text-xl font-extrabold text-slate-200 mt-1 font-mono">24 (Live)</span>
+              </div>
+              <div className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/40">
+                <span className="text-[10px] font-bold text-slate-500 uppercase block">Under Management</span>
+                <span className="text-xl font-extrabold text-slate-200 mt-1 font-mono">{properties.length} Properties</span>
+              </div>
+              <div className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/40">
+                <span className="text-[10px] font-bold text-slate-500 uppercase block">Total Managed Units</span>
+                <span className="text-xl font-extrabold text-slate-200 mt-1 font-mono">{units.length} Units</span>
+              </div>
+              <div className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/40">
+                <span className="text-[10px] font-bold text-slate-500 uppercase block">Open Workorders</span>
+                <span className="text-xl font-extrabold text-amber-400 mt-1 font-mono">{tickets.length} Pending</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div id="dashboard-workspace" className="min-h-screen bg-slate-50 flex text-slate-800">
+    <div className="min-h-screen bg-slate-50 flex flex-col w-full">
+      {renderAdminSwitcherBar()}
+      <div id="dashboard-workspace" className="flex-1 flex text-slate-800">
       
       {/* 1. SIDEBAR */}
       <aside
@@ -312,6 +519,21 @@ export const Dashboard: React.FC = () => {
               <Home className="h-4.5 w-4.5" />
               {sidebarOpen && <span>Overview Cockpit</span>}
             </button>
+
+            {/* Financial Performance Hub */}
+            {isOwner && (
+              <button
+                onClick={() => setActiveTab("financial")}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
+                  activeTab === "financial"
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-sm"
+                    : "border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-white"
+                }`}
+              >
+                <DollarSign className="h-4.5 w-4.5" />
+                {sidebarOpen && <span>Financial Hub</span>}
+              </button>
+            )}
 
             {/* Properties */}
             {!isTenant && (
@@ -510,6 +732,7 @@ export const Dashboard: React.FC = () => {
             </button>
             <h1 className="font-display font-extrabold text-slate-900 text-lg md:text-xl capitalize">
               {activeTab === "overview" && "Workspace Overview"}
+              {activeTab === "financial" && "Financial Performance Hub"}
               {activeTab === "properties" && "Property Assets"}
               {activeTab === "units" && "Units Inventory"}
               {activeTab === "tenants" && "Tenants Directory"}
@@ -536,10 +759,11 @@ export const Dashboard: React.FC = () => {
             {/* Notifications Bell Widget */}
             <div className="relative">
               <button
-                onClick={() => {
-                  setNotifDropdownOpen(!notifDropdownOpen);
+                onMouseEnter={() => {
+                  setNotifDropdownOpen(true);
                   setUserDropdownOpen(false);
                 }}
+                onMouseLeave={() => setNotifDropdownOpen(false)}
                 className="p-2 rounded-xl hover:bg-slate-100 text-slate-600 transition-colors border border-slate-100 bg-slate-50 relative"
               >
                 <Bell className="h-4.5 w-4.5" />
@@ -550,7 +774,11 @@ export const Dashboard: React.FC = () => {
 
               {/* Notification Dropdown List */}
               {notifDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl p-4 space-y-3 z-50">
+                <div 
+                  onMouseEnter={() => setNotifDropdownOpen(true)}
+                  onMouseLeave={() => setNotifDropdownOpen(false)}
+                  className="absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl p-4 space-y-3 z-50"
+                >
                   <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                     <span className="font-display font-bold text-slate-900 text-sm">Notifications ({unreadNotificationsCount})</span>
                     {filteredNotifications.length > 0 && (
@@ -614,10 +842,11 @@ export const Dashboard: React.FC = () => {
             {/* User Dropdown trigger */}
             <div className="relative">
               <button
-                onClick={() => {
-                  setUserDropdownOpen(!userDropdownOpen);
+                onMouseEnter={() => {
+                  setUserDropdownOpen(true);
                   setNotifDropdownOpen(false);
                 }}
+                onMouseLeave={() => setUserDropdownOpen(false)}
                 className="flex items-center gap-1.5 p-1 rounded-xl hover:bg-slate-50 transition-colors"
               >
                 <div className="h-8 w-8 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center shadow-md">
@@ -627,7 +856,11 @@ export const Dashboard: React.FC = () => {
               </button>
 
               {userDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl border border-slate-200 shadow-2xl p-3 space-y-1.5 z-50 text-xs">
+                <div 
+                  onMouseEnter={() => setUserDropdownOpen(true)}
+                  onMouseLeave={() => setUserDropdownOpen(false)}
+                  className="absolute right-0 mt-2 w-52 bg-white rounded-2xl border border-slate-200 shadow-2xl p-3 space-y-1.5 z-50 text-xs"
+                >
                   <div className="p-2 border-b border-slate-100">
                     <div className="font-bold text-slate-900">{currentUser.full_name}</div>
                     <div className="text-[10px] text-slate-400 font-mono mt-0.5">{currentUser.email}</div>
@@ -663,6 +896,7 @@ export const Dashboard: React.FC = () => {
               TAB: OVERVIEW
               ========================================================================= */}
           {activeTab === "overview" && <OverviewTab />}
+          {activeTab === "financial" && <FinancialHubTab />}
 
           {/* =========================================================================
               MODULAR SAAS TABS
@@ -833,7 +1067,7 @@ export const Dashboard: React.FC = () => {
                     {units
                       .filter((u) => u.property_id === newLease.property_id && u.status === UnitStatus.VACANT)
                       .map((u) => (
-                        <option key={u.id} value={u.id}>Unit {u.unit_number} (${u.rent_amount}/mo)</option>
+                        <option key={u.id} value={u.id}>Unit {u.unit_number} ({formatPKR(u.rent_amount)}/mo)</option>
                     ))}
                   </select>
                 </div>
@@ -1000,6 +1234,7 @@ export const Dashboard: React.FC = () => {
         </div>
       )}
 
+      </div>
     </div>
   );
 };

@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { RentPayment, PaymentStatus, Lease } from "../types";
+import { formatPKR } from "../utils/currency";
 import { 
-  DollarSign, 
+  DollarSign,
   Search, 
   Plus, 
   Trash2, 
@@ -19,6 +20,8 @@ import {
   Wallet 
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 
 export const RentTab: React.FC = () => {
   const { 
@@ -32,6 +35,21 @@ export const RentTab: React.FC = () => {
     showToast,
     properties
   } = useApp();
+
+  const handleDownloadReceiptPDF = async (payment: RentPayment) => {
+    const input = document.getElementById(`receipt-${payment.id}`);
+    if (input) {
+      const canvas = await html2canvas(input);
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Receipt_${payment.id}.pdf`);
+      showToast("Receipt downloaded successfully.", "success");
+    }
+  };
 
   const isTenant = currentUser?.role === "Tenant";
 
@@ -162,7 +180,7 @@ export const RentTab: React.FC = () => {
         amount: receivedAmount // adjust amount to what was actually paid
       });
       if (success) {
-        showToast(`Logged partial payment of $${receivedAmount} via ${payMethod}.`, "success");
+        showToast(`Logged partial payment of ${formatPKR(receivedAmount)} via ${payMethod}.`, "success");
       }
     } else {
       // Full Payment
@@ -191,7 +209,7 @@ export const RentTab: React.FC = () => {
         <div className="bg-white border border-slate-200 p-4 rounded-2xl flex items-center justify-between shadow-sm">
           <div className="space-y-1">
             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Invoiced</span>
-            <p className="font-mono font-extrabold text-slate-900 text-lg">${totalInvoiced.toLocaleString()}</p>
+            <p className="font-mono font-extrabold text-slate-900 text-lg">{formatPKR(totalInvoiced)}</p>
           </div>
           <div className="h-10 w-10 bg-slate-50 text-slate-600 rounded-xl border border-slate-100 flex items-center justify-center">
             <Wallet className="h-5 w-5" />
@@ -202,7 +220,7 @@ export const RentTab: React.FC = () => {
         <div className="bg-white border border-slate-200 p-4 rounded-2xl flex items-center justify-between shadow-sm">
           <div className="space-y-1">
             <span className="text-[10px] text-green-500 font-bold uppercase tracking-wider">Rent Collected</span>
-            <p className="font-mono font-extrabold text-green-700 text-lg">${totalPaid.toLocaleString()}</p>
+            <p className="font-mono font-extrabold text-green-700 text-lg">{formatPKR(totalPaid)}</p>
           </div>
           <div className="h-10 w-10 bg-green-50 text-green-600 rounded-xl border border-green-100 flex items-center justify-center">
             <TrendingUp className="h-5 w-5" />
@@ -213,7 +231,7 @@ export const RentTab: React.FC = () => {
         <div className="bg-white border border-slate-200 p-4 rounded-2xl flex items-center justify-between shadow-sm">
           <div className="space-y-1">
             <span className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">Partial Cleared</span>
-            <p className="font-mono font-extrabold text-amber-700 text-lg">${totalPartial.toLocaleString()}</p>
+            <p className="font-mono font-extrabold text-amber-700 text-lg">{formatPKR(totalPartial)}</p>
           </div>
           <div className="h-10 w-10 bg-amber-50 text-amber-600 rounded-xl border border-amber-100 flex items-center justify-center">
             <CreditCard className="h-5 w-5" />
@@ -224,7 +242,7 @@ export const RentTab: React.FC = () => {
         <div className="bg-white border border-slate-200 p-4 rounded-2xl flex items-center justify-between shadow-sm">
           <div className="space-y-1">
             <span className="text-[10px] text-rose-500 font-bold uppercase tracking-wider">Outstanding Dues</span>
-            <p className="font-mono font-extrabold text-rose-700 text-lg">${totalUnpaid.toLocaleString()}</p>
+            <p className="font-mono font-extrabold text-rose-700 text-lg">{formatPKR(totalUnpaid)}</p>
           </div>
           <div className="h-10 w-10 bg-rose-50 text-rose-600 rounded-xl border border-rose-100 flex items-center justify-center">
             <TrendingDown className="h-5 w-5" />
@@ -306,7 +324,7 @@ export const RentTab: React.FC = () => {
                   {filteredPayments.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="p-8 text-center text-slate-400 space-y-2">
-                        <DollarSign className="h-10 w-10 text-slate-300 mx-auto" />
+                        <Wallet className="h-10 w-10 text-slate-300 mx-auto" />
                         <p>No rent invoices or ledger items found.</p>
                       </td>
                     </tr>
@@ -334,7 +352,7 @@ export const RentTab: React.FC = () => {
                           </div>
                         </td>
                         <td className="p-4 font-mono font-extrabold text-slate-950 text-sm">
-                          ${p.amount.toLocaleString()}
+                          {formatPKR(p.amount)}
                         </td>
                         <td className="p-4">
                           <span className="flex items-center gap-1 font-semibold text-slate-700">
@@ -660,7 +678,7 @@ export const RentTab: React.FC = () => {
                   <div className="grid grid-cols-3 p-3">
                     <span className="font-bold">Monthly Rental dues</span>
                     <span className="text-center">{receiptPdf.paid_date || receiptPdf.due_date}</span>
-                    <span className="text-right font-mono font-bold text-slate-950">${receiptPdf.amount.toLocaleString()} USD</span>
+                    <span className="text-right font-mono font-bold text-slate-950">{formatPKR(receiptPdf.amount)}</span>
                   </div>
                 </div>
 

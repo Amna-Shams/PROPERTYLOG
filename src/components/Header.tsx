@@ -19,6 +19,7 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, setCurrentPath }) =
 
   const navItems = [
     { label: "Home", path: "/" },
+    { label: "Browse Rentals", path: "/rentals" },
     { label: "Services", path: "/services" },
     { label: "About", path: "/about" },
     { label: "Contact", path: "/contact" }
@@ -93,21 +94,13 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, setCurrentPath }) =
               </button>
             </>
           ) : (
-            <>
-              <button
-                onClick={() => handleNavClick("/login")}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-lg transition-colors"
-              >
-                <LogIn className="h-4 w-4" />
-                Login
-              </button>
-              <button
-                onClick={() => handleNavClick("/register")}
-                className="px-4 py-2 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-lg shadow-slate-900/10 transition-all hover:shadow-slate-900/15"
-              >
-                Get Started
-              </button>
-            </>
+            <button
+              onClick={() => handleNavClick("/login")}
+              className="flex items-center gap-1.5 px-4.5 py-2 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-lg shadow-slate-900/10 transition-all hover:shadow-slate-900/15"
+            >
+              <LogIn className="h-4 w-4" />
+              Login to Workspace
+            </button>
           )}
         </div>
 
@@ -165,20 +158,13 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, setCurrentPath }) =
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                  <button
-                    onClick={() => handleNavClick("/login")}
-                    className="flex justify-center items-center py-2.5 text-sm font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200"
-                  >
-                    Login
-                  </button>
-                  <button
-                    onClick={() => handleNavClick("/register")}
-                    className="flex justify-center items-center py-2.5 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-md"
-                  >
-                    Get Started
-                  </button>
-                </div>
+                <button
+                  onClick={() => handleNavClick("/login")}
+                  className="flex w-full justify-center items-center py-2.5 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-md gap-1.5"
+                >
+                  <LogIn className="h-4 w-4" />
+                  Login to Workspace
+                </button>
               )}
             </div>
           </motion.div>

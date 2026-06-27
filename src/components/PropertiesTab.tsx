@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Property, PropertyType, PropertyStatus, UnitStatus } from "../types";
+import { LocationSelector } from "./pakistan/LocationSelector";
+import { PropTechForm } from "./PropertyListingForm/PropTechForm";
+import { PropertyFormContainer } from "./PropertyFormSimple/PropertyFormContainer";
 import { 
   Building2, 
   Search, 
@@ -20,19 +23,20 @@ import {
   Users,
   ChevronRight
 } from "lucide-react";
+import { formatPKR } from "../utils/currency";
 import { motion, AnimatePresence } from "motion/react";
 
 // Mock locations for Google Places Autocomplete simulation
 const MOCK_PLACES_SUGGESTIONS = [
-  { description: "742 Evergreen Terrace, Springfield", lat: 39.7817, lng: -89.6501 },
-  { description: "1600 Amphitheatre Parkway, Mountain View, CA", lat: 37.4220, lng: -122.0841 },
-  { description: "101 Broadway, New York City, NY", lat: 40.7128, lng: -74.0060 },
-  { description: "890 Ocean Drive, Miami Beach, FL", lat: 25.7781, lng: -80.1313 },
-  { description: "55 Pine Needle Way, Aspen, CO", lat: 39.1911, lng: -106.8175 },
-  { description: "221B Baker Street, London, UK", lat: 51.5237, lng: -0.1585 },
   { description: "123 Jinnah Avenue, Blue Area, Islamabad", lat: 33.7294, lng: 73.0697 },
   { description: "45 Mall Road, Lahore, Pakistan", lat: 31.5204, lng: 74.3587 },
-  { description: "88 Gulshan Avenue, Dhaka, Bangladesh", lat: 23.7925, lng: 90.4178 }
+  { description: "10 Main Boulevard, Gulberg, Lahore, Pakistan", lat: 31.5150, lng: 74.3500 },
+  { description: "Plot 5, Civic Center, Bahria Town, Rawalpindi, Pakistan", lat: 33.5186, lng: 73.1481 },
+  { description: "20 Main Clifton Road, Karachi, Pakistan", lat: 24.8138, lng: 67.0312 },
+  { description: "Street 7, Hayatabad, Peshawar, Pakistan", lat: 33.9930, lng: 71.4420 },
+  { description: "Plot 12, Satiana Road, Faisalabad, Pakistan", lat: 31.4096, lng: 73.1256 },
+  { description: "Chungi No. 9, Multan, Pakistan", lat: 30.1830, lng: 71.4640 },
+  { description: "Sirki Road, Quetta, Pakistan", lat: 30.1841, lng: 66.9740 }
 ];
 
 export const PropertiesTab: React.FC = () => {
@@ -50,21 +54,22 @@ export const PropertiesTab: React.FC = () => {
 
   const isTenant = currentUser?.role === "Tenant";
 
-  // Tab View state: "list" | "new" | "edit" | "details"
-  const [view, setView] = useState<"list" | "new" | "edit" | "details">("list");
+  // Tab View state: "list" | "new" | "edit" | "details" | "wizard"
+  const [view, setView] = useState<"list" | "new" | "edit" | "details" | "wizard">("list");
   const [selectedPropId, setSelectedPropId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Search and Filter states
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [selectedCity, setSelectedCity] = useState("");
 
   // Form states
   const [formName, setFormName] = useState("");
   const [formType, setFormType] = useState<PropertyType>(PropertyType.APARTMENT);
   const [formAddress, setFormAddress] = useState("");
-  const [formLat, setFormLat] = useState<number>(37.7749);
-  const [formLng, setFormLng] = useState<number>(-122.4194);
+  const [formLat, setFormLat] = useState<number>(33.7294);
+  const [formLng, setFormLng] = useState<number>(73.0697);
   const [formDesc, setFormDesc] = useState("");
   const [formImageUrl, setFormImageUrl] = useState("");
   const [formUnitsCount, setFormUnitsCount] = useState<number>(4);
@@ -81,7 +86,8 @@ export const PropertiesTab: React.FC = () => {
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           p.address.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = typeFilter === "all" || p.type === typeFilter;
-    return matchesSearch && matchesType;
+    const matchesCity = selectedCity === "" || p.address.toLowerCase().includes(selectedCity.toLowerCase());
+    return matchesSearch && matchesType && matchesCity;
   });
 
   // Handle Autocomplete Address typing
@@ -205,6 +211,7 @@ export const PropertiesTab: React.FC = () => {
   };
 
   const viewDetails = (id: string) => {
+    console.log("View Details clicked for ID:", id);
     setSelectedPropId(id);
     setView("details");
   };
@@ -213,8 +220,8 @@ export const PropertiesTab: React.FC = () => {
     setFormName("");
     setFormType(PropertyType.APARTMENT);
     setFormAddress("");
-    setFormLat(37.7749);
-    setFormLng(-122.4194);
+    setFormLat(33.7294);
+    setFormLng(73.0697);
     setFormDesc("");
     setFormImageUrl("");
     setFormUnitsCount(4);
@@ -237,6 +244,7 @@ export const PropertiesTab: React.FC = () => {
       {/* HEADER CONTROLS */}
       {view === "list" && (
         <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+          <LocationSelector onCitySelect={setSelectedCity} />
           <div className="flex-1 w-full flex flex-col md:flex-row gap-3">
             {/* Search */}
             <div className="relative flex-1">
@@ -267,13 +275,15 @@ export const PropertiesTab: React.FC = () => {
           </div>
 
           {!isTenant && (
-            <button
-              onClick={startNewProperty}
-              className="w-full sm:w-auto px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg text-xs transition-all"
-            >
-              <Plus className="h-4 w-4" />
-              Add Property
-            </button>
+            <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+              <button
+                onClick={() => setView("wizard")}
+                className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg text-xs transition-all"
+              >
+                <Plus className="h-4 w-4" />
+                + Add Property
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -295,12 +305,14 @@ export const PropertiesTab: React.FC = () => {
                 <h3 className="font-display font-bold text-slate-800 text-base">No properties found</h3>
                 <p className="text-xs text-slate-400 max-w-sm mx-auto">Try broadening your search query or add a brand new property asset to start managing.</p>
                 {!isTenant && (
-                  <button
-                    onClick={startNewProperty}
-                    className="mt-2 py-2 px-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs transition-colors shadow-lg shadow-blue-500/10"
-                  >
-                    Add Your First Property
-                  </button>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 mt-2">
+                    <button
+                      onClick={() => setView("wizard")}
+                      className="py-2 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-colors shadow-lg shadow-emerald-500/10 flex items-center gap-1.5"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> + Add Property
+                    </button>
+                  </div>
                 )}
               </div>
             ) : (
@@ -330,7 +342,11 @@ export const PropertiesTab: React.FC = () => {
                       {/* Interactive Actions Overlay */}
                       <div className="absolute top-3 right-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
-                          onClick={() => viewDetails(p.id)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            viewDetails(p.id);
+                          }}
                           className="p-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 shadow-sm hover:text-blue-600"
                           title="View Details"
                         >
@@ -588,6 +604,17 @@ export const PropertiesTab: React.FC = () => {
         )}
 
         {/* VIEW 3: PROPERTY DETAILS (PATH: /properties/[id]) */}
+        {view === "wizard" && (
+          <motion.div
+            key="property-wizard"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -15 }}
+          >
+            <PropertyFormContainer onSuccessClose={() => setView("list")} />
+          </motion.div>
+        )}
+
         {view === "details" && selectedProp && (
           <motion.div
             key="property-details"
@@ -695,7 +722,7 @@ export const PropertiesTab: React.FC = () => {
                   <div className="space-y-2 divide-y divide-slate-100">
                     <div className="flex justify-between py-1.5">
                       <span className="text-slate-400">Monthly Rent Capacity:</span>
-                      <span className="font-bold text-slate-800 font-mono">${totalMonthlyRent.toLocaleString()}</span>
+                      <span className="font-bold text-slate-800 font-mono">{formatPKR(totalMonthlyRent)}</span>
                     </div>
                     <div className="flex justify-between py-1.5">
                       <span className="text-slate-400">Occupancy Rate:</span>
@@ -744,7 +771,7 @@ export const PropertiesTab: React.FC = () => {
                             <tr key={u.id} className="hover:bg-slate-50/50">
                               <td className="py-3 font-bold text-slate-900">Unit {u.unit_number}</td>
                               <td className="py-3 font-mono">Floor {u.floor}</td>
-                              <td className="py-3 font-mono">${u.rent_amount.toLocaleString()}</td>
+                              <td className="py-3 font-mono">{formatPKR(u.rent_amount)}</td>
                               <td className="py-3">
                                 <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
                                   u.status === UnitStatus.OCCUPIED 
@@ -786,7 +813,7 @@ export const PropertiesTab: React.FC = () => {
                             <p className="text-[10px] text-slate-500 font-mono">Unit {l.unit_number} • {l.start_date} to {l.end_date}</p>
                           </div>
                           <div className="text-right font-mono">
-                            <p className="font-bold text-slate-800">${l.rent_amount}/mo</p>
+                            <p className="font-bold text-slate-800">{formatPKR(l.rent_amount)}/mo</p>
                             <span className="text-[9px] bg-green-100 text-green-800 px-1.5 py-0.5 rounded-md font-bold">{l.status}</span>
                           </div>
                         </div>

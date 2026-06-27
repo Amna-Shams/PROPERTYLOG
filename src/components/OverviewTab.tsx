@@ -2,6 +2,8 @@ import React from "react";
 import { Building2, Users, Wrench, AlertTriangle, DollarSign, CheckCircle2 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { UserRole, UnitStatus, LeaseStatus, TicketStatus, PaymentStatus, TicketPriority } from "../types";
+import { formatPKR } from "../utils/currency";
+
 
 export const OverviewTab: React.FC = () => {
   const {
@@ -128,7 +130,7 @@ export const OverviewTab: React.FC = () => {
           <div>
             <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{isTenant ? "Paid This Month" : "Collections"}</div>
             <div className="text-base font-extrabold font-display text-slate-950">
-              ${totalRentCollectedThisMonth.toLocaleString()}
+              {formatPKR(totalRentCollectedThisMonth)}
             </div>
           </div>
         </div>
@@ -141,7 +143,7 @@ export const OverviewTab: React.FC = () => {
           <div>
             <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{isTenant ? "Dues" : "Pending"}</div>
             <div className="text-base font-extrabold font-display text-slate-950">
-              ${pendingDuesAmount.toLocaleString()}
+              {formatPKR(pendingDuesAmount)}
             </div>
           </div>
         </div>

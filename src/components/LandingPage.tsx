@@ -129,17 +129,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({ setCurrentPath }) => {
                 className="flex flex-col sm:flex-row justify-center lg:justify-start items-center gap-4"
               >
                 <button
-                  onClick={() => setCurrentPath("/register")}
+                  onClick={() => setCurrentPath("/rentals")}
                   className="w-full sm:w-auto px-8 py-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-base transition-all shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2 group"
                 >
-                  Get Started Free
+                  Find Rentals Now
                   <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
                 </button>
                 <button
-                  onClick={() => setCurrentPath("/services")}
+                  onClick={() => setCurrentPath("/login")}
                   className="w-full sm:w-auto px-8 py-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-base transition-all"
                 >
-                  Explore Services
+                  Access Workspace
                 </button>
               </motion.div>
             </div>
@@ -408,14 +408,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ setCurrentPath }) => {
             Ready to Take Control of Your Portfolio?
           </h2>
           <p className="text-blue-100 max-w-2xl mx-auto text-base sm:text-lg">
-            Create an owner or tenant account today. Discover instant automated rent lists, clear leases, and seamless maintenance tracking.
+            Access the PROPERTYLOG workspace today. Discover instant automated rent lists, clear leases, and seamless maintenance tracking.
           </p>
           <div className="pt-4 flex flex-col sm:flex-row justify-center items-center gap-4">
             <button
-              onClick={() => setCurrentPath("/register")}
+              onClick={() => setCurrentPath("/login")}
               className="w-full sm:w-auto px-8 py-3.5 bg-white text-blue-600 hover:bg-blue-50 font-bold rounded-xl shadow-lg transition-all"
             >
-              Get Started Instantly
+              Sign In To Workspace
             </button>
             <button
               onClick={() => setCurrentPath("/contact")}

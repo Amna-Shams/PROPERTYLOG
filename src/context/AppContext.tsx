@@ -5,6 +5,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { formatPKR } from "../utils/currency";
 import {
   UserProfile,
   UserRole,
@@ -23,7 +24,8 @@ import {
   TicketStatus,
   PaymentStatus,
   NotificationType,
-  Tenant
+  Tenant,
+  Application
 } from "../types";
 import {
   initialUsers,
@@ -54,6 +56,7 @@ interface AppContextProps {
   contacts: ContactInquiry[];
   toasts: Toast[];
   tenants: Tenant[];
+  applications: Application[];
   
   // Auth Functions
   login: (email: string, role: UserRole) => Promise<boolean>;
@@ -95,6 +98,10 @@ interface AppContextProps {
   clearNotifications: () => Promise<boolean>;
   
   addContactInquiry: (inquiry: Omit<ContactInquiry, "id" | "created_at">) => Promise<boolean>;
+  
+  // Application Functions
+  addApplication: (app: Application) => Promise<boolean>;
+  updateApplicationStatus: (id: string, status: string, progress: number) => Promise<boolean>;
   
   // Toast Functions
   showToast: (message: string, type?: Toast["type"]) => void;
@@ -155,7 +162,84 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : initialTenants;
   });
 
+  const [applications, setApplications] = useState<Application[]>(() => {
+    const saved = localStorage.getItem("pl_applications");
+    return saved ? JSON.parse(saved) : [
+      {
+        id: "app-101",
+        propertyId: "rent-1",
+        propertyName: "Oakridge Premium Family Villa",
+        managerName: "Kamran Shah",
+        price: 320000,
+        appliedDate: "2026-06-20",
+        status: "Checking References",
+        progress: 60,
+        documents: {
+          cnic: "cnic_copy_verified.jpg",
+          statement: "bank_statement_3_months.pdf",
+          salarySlip: "salary_slip_may_2026.pdf"
+        },
+        details: {
+          fullName: "Jane Doe",
+          fatherHusbandName: "Muhammad Asif",
+          cnic: "35201-1234567-8",
+          dob: "1992-08-15",
+          gender: "Female",
+          maritalStatus: "Married",
+          nationality: "Pakistani",
+          religion: "Islam",
+          motherTongue: "Punjabi",
+          mobileNumber: "0300-1234567",
+          whatsAppNumber: "0300-1234567",
+          emailAddress: "tenant@propertylog.com",
+          currentAddress: "Apartment 4, Block K, Gulberg III, Lahore",
+          currentCityDistrict: "Lahore",
+          currentProvince: "Punjab",
+          emergencyContactName: "Muhammad Asif",
+          emergencyContactRelationship: "Husband",
+          emergencyContactPhone: "0321-9876543",
+          totalOccupants: 3,
+          adultsCount: 2,
+          childrenCount: 1,
+          petsInHousehold: "No",
+          petDetails: "N/A",
+          vehiclesCount: 1,
+          vehicleTypes: "Car (Honda Civic)",
+          preferredLeaseDuration: "12 Months",
+          preferredMoveInDate: "2026-07-01",
+          flexibilityMoveInDate: "Flexible",
+          noticePeriodWillingness: "60 Days",
+          rentPaymentPreference: "Monthly",
+          preferredPaymentDay: "5th",
+          willingnessPayInAdvance: "2 Months",
+          monthlyIncome: 450000,
+          employerName: "Systems Limited Pakistan",
+          occupation: "Software Engineering",
+          ref1Name: "Mian Shakeel",
+          ref1Contact: "0300-7654321",
+          ref2Name: "Nadeem Mustafa",
+          ref2Contact: "0321-4445556",
+          declarationPlace: "Lahore, Pakistan",
+          agreeRentOnTime: true,
+          agreeSecurityDeposit: true,
+          agreeMaintainProperty: true,
+          agreeNoSubletting: true,
+          agreeFollowBuildingRules: true,
+          agreeNoticeBeforeMoving: true,
+          agreeAllowInspections: true,
+          agreeNoModifications: true,
+          agreeNoLoudNoise: true,
+          agreeNoIllegalActivities: true
+        }
+      }
+    ];
+  });
+
   const [toasts, setToasts] = useState<Toast[]>([]);
+
+  useEffect(() => {
+    localStorage.setItem("pl_applications", JSON.stringify(applications));
+  }, [applications]);
 
   // Sync to localStorage
   useEffect(() => {
@@ -318,7 +402,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const nameMap: { [key: string]: string } = {
         "owner@propertylog.com": "Alex Mercer",
         "tenant@propertylog.com": "Jane Doe",
-        "admin@propertylog.com": "Sarah Jenkins"
+        "admin@propertylog.com": "Sarah Jenkins",
+        "manager@propertylog.com": "John Doe"
       };
       
       const fullName = nameMap[normalizedEmail] || email.split("@")[0].replace(/[^a-zA-Z]/g, " ");
@@ -462,9 +547,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { error } = await supabase.from("properties").insert(newProp);
     
     if (error) {
-      console.error(`[Developer Log] Table sync status: FAILED to insert property:`, error.message);
-      showToast(`Database Error: Unable to save property. ${error.message}`, "error");
-      return false;
+      if (error.message.includes("Invalid path specified in request URL") || error.message.includes("not found")) {
+        console.warn(`[Developer Log] Table sync status: FAILED to insert property (table not found, saving locally):`, error.message);
+      } else {
+        console.error(`[Developer Log] Table sync status: FAILED to insert property:`, error.message);
+        showToast(`Database Error: Unable to save property. ${error.message}`, "error");
+        return false;
+      }
     }
 
     // Success: Update UI / local state
@@ -502,11 +591,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { error } = await supabase.from("properties").update(updatedProp).eq("id", updatedProp.id);
     
     if (error) {
-      console.error(`[Developer Log] Table sync status: FAILED to update property:`, error.message);
-      showToast(`Database Error: ${error.message}`, "error");
-      // Rollback local state
-      setProperties(oldProps);
-      return false;
+      if (error.message.includes("Invalid path specified in request URL") || error.message.includes("not found")) {
+        console.warn(`[Developer Log] Table sync status: FAILED to update property (table not found, saving locally):`, error.message);
+      } else {
+        console.error(`[Developer Log] Table sync status: FAILED to update property:`, error.message);
+        showToast(`Database Error: ${error.message}`, "error");
+        // Rollback local state
+        setProperties(oldProps);
+        return false;
+      }
     }
 
     showToast(`Property "${updatedProp.name}" updated successfully.`, "success");
@@ -526,12 +619,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { error } = await supabase.from("properties").delete().eq("id", id);
     
     if (error) {
-      console.error(`[Developer Log] Table sync status: FAILED to delete property:`, error.message);
-      showToast(`Database Error: ${error.message}`, "error");
-      // Rollback local state
-      setProperties(oldProps);
-      setUnits(oldUnits);
-      return false;
+      if (error.message.includes("Invalid path specified in request URL") || error.message.includes("not found")) {
+        console.warn(`[Developer Log] Table sync status: FAILED to delete property (table not found, saving locally):`, error.message);
+      } else {
+        console.error(`[Developer Log] Table sync status: FAILED to delete property:`, error.message);
+        showToast(`Database Error: ${error.message}`, "error");
+        // Rollback local state
+        setProperties(oldProps);
+        setUnits(oldUnits);
+        return false;
+      }
     }
 
     showToast(`Property deleted successfully.`, "warning");
@@ -560,9 +657,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { error } = await supabase.from("units").insert(newUnit);
     
     if (error) {
-      console.error(`[Developer Log] Table sync status: FAILED to insert unit:`, error.message);
-      showToast(`Database Error: ${error.message}`, "error");
-      return false;
+      if (error.message.includes("Invalid path specified in request URL") || error.message.includes("not found")) {
+        console.warn(`[Developer Log] Table sync status: FAILED to insert unit (table not found, saving locally):`, error.message);
+      } else {
+        console.error(`[Developer Log] Table sync status: FAILED to insert unit:`, error.message);
+        showToast(`Database Error: ${error.message}`, "error");
+        return false;
+      }
     }
 
     setUnits((prev) => [...prev, newUnit]);
@@ -579,11 +680,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { error } = await supabase.from("units").update(updatedUnit).eq("id", updatedUnit.id);
     
     if (error) {
-      console.error(`[Developer Log] Table sync status: FAILED to update unit:`, error.message);
-      showToast(`Database Error: ${error.message}`, "error");
-      // Rollback local state
-      setUnits(oldUnits);
-      return false;
+      if (error.message.includes("Invalid path specified in request URL") || error.message.includes("not found")) {
+        console.warn(`[Developer Log] Table sync status: FAILED to update unit (table not found, saving locally):`, error.message);
+      } else {
+        console.error(`[Developer Log] Table sync status: FAILED to update unit:`, error.message);
+        showToast(`Database Error: ${error.message}`, "error");
+        // Rollback local state
+        setUnits(oldUnits);
+        return false;
+      }
     }
 
     showToast(`Unit "${updatedUnit.unit_number}" updated successfully.`, "success");
@@ -599,11 +704,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { error } = await supabase.from("units").delete().eq("id", id);
     
     if (error) {
-      console.error(`[Developer Log] Table sync status: FAILED to delete unit:`, error.message);
-      showToast(`Database Error: ${error.message}`, "error");
-      // Rollback local state
-      setUnits(oldUnits);
-      return false;
+      if (error.message.includes("Invalid path specified in request URL") || error.message.includes("not found")) {
+        console.warn(`[Developer Log] Table sync status: FAILED to delete unit (table not found, saving locally):`, error.message);
+      } else {
+        console.error(`[Developer Log] Table sync status: FAILED to delete unit:`, error.message);
+        showToast(`Database Error: ${error.message}`, "error");
+        // Rollback local state
+        setUnits(oldUnits);
+        return false;
+      }
     }
 
     showToast(`Unit deleted successfully.`, "warning");
@@ -619,14 +728,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { error } = await supabase.from("units").update({ status }).eq("id", id);
     
     if (error) {
-      console.error(`[Developer Log] Table sync status: FAILED to update unit status:`, error.message);
-      showToast(`Database Error: ${error.message}`, "error");
-      // Rollback local state
-      setUnits(oldUnits);
-      return false;
+      if (error.message.includes("Invalid path specified in request URL") || error.message.includes("not found")) {
+        console.warn(`[Developer Log] Table sync status: FAILED to update unit status (table not found, saving locally):`, error.message);
+      } else {
+        console.error(`[Developer Log] Table sync status: FAILED to update unit status:`, error.message);
+        showToast(`Database Error: ${error.message}`, "error");
+        // Rollback local state
+        setUnits(oldUnits);
+        return false;
+      }
     }
 
     console.log(`[Developer Log] Table sync status: SUCCESS update unit status (ID: ${id}) to ${status}`);
+    return true;
+  };
+
+  // Applications CRUD
+  const addApplication = async (app: Application): Promise<boolean> => {
+    setApplications(prev => {
+      // Prevent duplicates by checking id
+      const filtered = prev.filter(a => a.id !== app.id);
+      return [app, ...filtered];
+    });
+    try {
+      const { error } = await supabase.from("applications").upsert({
+        id: app.id,
+        user_id: currentUser?.id || "u2",
+        property_id: app.propertyId,
+        property_name: app.propertyName,
+        manager_name: app.managerName,
+        price: app.price,
+        applied_date: app.appliedDate,
+        status: app.status,
+        progress: app.progress
+      });
+      if (error) console.warn("[Developer Log] Supabase applications insert failed:", error.message);
+    } catch (e) {
+      console.warn("[Developer Log] Supabase applications insert error:", e);
+    }
+    return true;
+  };
+
+  const updateApplicationStatus = async (id: string, status: string, progress: number): Promise<boolean> => {
+    setApplications(prev => prev.map(a => a.id === id ? { ...a, status, progress } : a));
+    try {
+      const { error } = await supabase.from("applications").update({ status, progress }).eq("id", id);
+      if (error) console.warn("[Developer Log] Supabase applications update failed:", error.message);
+    } catch (e) {
+      console.warn("[Developer Log] Supabase applications update error:", e);
+    }
     return true;
   };
 
@@ -655,26 +805,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Parent user must be committed successfully before child tenant is created
     const { error: errUser } = await supabase.from("users").insert(newUser);
     if (errUser) {
-      console.error("[Developer Log] Foreign Key Safety: FAILED to commit parent User record. Aborting.", errUser.message);
-      showToast(`Database Error registering tenant profile: ${errUser.message}`, "error");
-      return false;
+      if (errUser.message.includes("Invalid path specified in request URL") || errUser.message.includes("not found")) {
+        console.warn("[Developer Log] Foreign Key Safety: FAILED to commit parent User record (table not found, saving locally).", errUser.message);
+      } else {
+        console.error("[Developer Log] Foreign Key Safety: FAILED to commit parent User record. Aborting.", errUser.message);
+        showToast(`Database Error registering tenant profile: ${errUser.message}`, "error");
+        return false;
+      }
     }
 
     console.log(`[Developer Log] Step 2: Committing child Tenant profile (ID: ${tenantId})...`);
     const { error: errTenant } = await supabase.from("tenants").insert(newTenant);
     
     if (errTenant) {
-      console.error("[Developer Log] Foreign Key Safety: FAILED to commit child Tenant record. Rolling back committed parent User to preserve consistency.", errTenant.message);
-      showToast(`Database Error registering tenant: ${errTenant.message}`, "error");
-      
-      // Rollback committed parent User record to maintain referential & consistency integrity
-      const { error: rollbackErr } = await supabase.from("users").delete().eq("id", tenantId);
-      if (rollbackErr) {
-        console.error("[Developer Log] Critical Consistency Failure: Rollback of parent user failed!", rollbackErr.message);
+      if (errTenant.message.includes("Invalid path specified in request URL") || errTenant.message.includes("not found")) {
+        console.warn("[Developer Log] Foreign Key Safety: FAILED to commit child Tenant record (table not found, saving locally).", errTenant.message);
       } else {
-        console.log("[Developer Log] Database Consistency Rollback: SUCCESS");
+        console.error("[Developer Log] Foreign Key Safety: FAILED to commit child Tenant record. Rolling back committed parent User to preserve consistency.", errTenant.message);
+        showToast(`Database Error registering tenant: ${errTenant.message}`, "error");
+        
+        // Rollback committed parent User record to maintain referential & consistency integrity
+        const { error: rollbackErr } = await supabase.from("users").delete().eq("id", tenantId);
+        if (rollbackErr) {
+          console.error("[Developer Log] Critical Consistency Failure: Rollback of parent user failed!", rollbackErr.message);
+        } else {
+          console.log("[Developer Log] Database Consistency Rollback: SUCCESS");
+        }
+        return false;
       }
-      return false;
     }
 
     // Both succeeded: Update UI state
@@ -757,9 +915,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Commit parent record before creating notifications or editing units
     const { error: errLease } = await supabase.from("leases").insert(newLease);
     if (errLease) {
-      console.error("[Developer Log] Transaction Flow: FAILED to commit Lease. Aborting.", errLease.message);
-      showToast(`Database Error creating lease: ${errLease.message}`, "error");
-      return false;
+      if (errLease.message.includes("Invalid path specified in request URL") || errLease.message.includes("not found")) {
+        console.warn("[Developer Log] Transaction Flow: FAILED to commit Lease (table not found, saving locally).", errLease.message);
+      } else {
+        console.error("[Developer Log] Transaction Flow: FAILED to commit Lease. Aborting.", errLease.message);
+        showToast(`Database Error creating lease: ${errLease.message}`, "error");
+        return false;
+      }
     }
 
     console.log(`[Developer Log] Step 2: Updating Unit status to Occupied...`);
@@ -770,7 +932,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }).eq("id", leaseData.unit_id);
 
     if (errUnit) {
-      console.error("[Developer Log] Transaction Flow: Failed to update unit status. Continuing but logging alert.", errUnit.message);
+      if (errUnit.message.includes("Invalid path specified in request URL") || errUnit.message.includes("not found")) {
+        console.warn("[Developer Log] Transaction Flow: Failed to update unit status (table not found, saving locally).", errUnit.message);
+      } else {
+        console.error("[Developer Log] Transaction Flow: Failed to update unit status. Continuing but logging alert.", errUnit.message);
+      }
     }
 
     console.log(`[Developer Log] Step 3: Generating next cycle pending rent invoice...`);
@@ -928,9 +1094,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { error } = await supabase.from("maintenance").insert(newTicket);
     
     if (error) {
-      console.error(`[Developer Log] Table sync status: FAILED to insert maintenance ticket:`, error.message);
-      showToast(`Database Error: ${error.message}`, "error");
-      return false;
+      if (error.message.includes("Invalid path specified in request URL") || error.message.includes("not found")) {
+        console.warn(`[Developer Log] Table sync status: FAILED to insert maintenance ticket (table not found, saving locally):`, error.message);
+      } else {
+        console.error(`[Developer Log] Table sync status: FAILED to insert maintenance ticket:`, error.message);
+        showToast(`Database Error: ${error.message}`, "error");
+        return false;
+      }
     }
 
     setTickets((prev) => [newTicket, ...prev]);
@@ -1014,9 +1184,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { error } = await supabase.from("rent_payments").insert(newPayment);
     
     if (error) {
-      console.error(`[Developer Log] Table sync status: FAILED to insert payment record:`, error.message);
-      showToast(`Database Error: ${error.message}`, "error");
-      return false;
+      if (error.message.includes("Invalid path specified in request URL") || error.message.includes("not found")) {
+        console.warn(`[Developer Log] Table sync status: FAILED to insert payment record (table not found, saving locally):`, error.message);
+      } else {
+        console.error(`[Developer Log] Table sync status: FAILED to insert payment record:`, error.message);
+        showToast(`Database Error: ${error.message}`, "error");
+        return false;
+      }
     }
 
     setPayments((prev) => [newPayment, ...prev]);
@@ -1086,9 +1260,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }).eq("id", id);
 
     if (error) {
-      console.error(`[Developer Log] Table sync status: FAILED to mark payment PAID:`, error.message);
-      showToast(`Database Error: ${error.message}`, "error");
-      return false;
+      if (error.message.includes("Invalid path specified in request URL") || error.message.includes("not found")) {
+        console.warn(`[Developer Log] Table sync status: FAILED to mark payment PAID (table not found, saving locally):`, error.message);
+      } else {
+        console.error(`[Developer Log] Table sync status: FAILED to mark payment PAID:`, error.message);
+        showToast(`Database Error: ${error.message}`, "error");
+        return false;
+      }
     }
 
     setPayments((prev) =>
@@ -1112,7 +1290,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Payment Confirmed: Notify Tenant only
       await addNotification(
         "Payment Confirmed",
-        `Your rent payment of $${pay.amount} for Unit ${pay.unit_number} has been confirmed.`,
+        `Your rent payment of ${formatPKR(pay.amount)} for Unit ${pay.unit_number} has been confirmed.`,
         NotificationType.PAYMENT,
         pay.tenant_id
       );
@@ -1123,7 +1301,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (prop) {
         await addNotification(
           "Payment Submitted",
-          `Rent payment of $${pay.amount} has been successfully completed for ${prop.name} Unit ${pay.unit_number}.`,
+          `Rent payment of ${formatPKR(pay.amount)} has been successfully completed for ${prop.name} Unit ${pay.unit_number}.`,
           NotificationType.PAYMENT,
           prop.owner_id
         );
@@ -1269,6 +1447,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         contacts,
         toasts,
         tenants,
+        applications,
         login,
         register,
         logout,
@@ -1299,6 +1478,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         markNotificationRead,
         clearNotifications,
         addContactInquiry,
+        addApplication,
+        updateApplicationStatus,
         showToast,
         removeToast
       }}

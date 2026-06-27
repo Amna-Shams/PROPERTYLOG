@@ -13,12 +13,17 @@ import { AboutPage } from "./components/AboutPage";
 import { ContactPage } from "./components/ContactPage";
 import { AuthPages } from "./components/AuthPages";
 import { Dashboard } from "./components/Dashboard";
+import { TenantPortal } from "./components/TenantPortal";
+import { PropertyManagerPortal } from "./components/PropertyManagerPortal";
 import { NotificationsPage } from "./components/NotificationsPage";
+import { RentalsPage } from "./components/RentalsPage";
+import { PropertyDetailPage } from "./components/PropertyDetailPage";
 import { ToastContainer } from "./components/ToastContainer";
 import { motion, AnimatePresence } from "motion/react";
+import { UserRole } from "./types";
 
 function AppContent() {
-  const { currentUser } = useApp();
+  const { currentUser, logout } = useApp();
   const [currentPath, setCurrentPath] = useState<string>(() => {
     // Read initial path from URL hash or fallback to state
     const hash = window.location.hash.replace("#", "");
@@ -28,13 +33,34 @@ function AppContent() {
     if (hash === "about") return "/about";
     if (hash === "contact") return "/contact";
     if (hash === "login") return "/login";
-    if (hash === "register") return "/register";
+    if (hash === "register") return "/login";
+    if (hash === "rentals") return "/rentals";
+    if (hash === "portal/admin" || hash === "portal-admin") return "/portal/admin";
+    if (hash === "portal/owner" || hash === "portal-owner") return "/portal/owner";
+    if (hash === "portal/tenant" || hash === "portal-tenant") return "/portal/tenant";
+    if (hash === "portal/property-manager" || hash === "portal-property-manager") return "/portal/property-manager";
+    if (hash.startsWith("property-detail-")) {
+      const id = hash.replace("property-detail-", "");
+      return `/property-detail/${id}`;
+    }
+    // Check path fallback
+    const pathname = window.location.pathname;
+    if (pathname.includes("/portal/admin")) return "/portal/admin";
+    if (pathname.includes("/portal/owner")) return "/portal/owner";
+    if (pathname.includes("/portal/tenant")) return "/portal/tenant";
+    if (pathname.includes("/portal/property-manager")) return "/portal/property-manager";
     return "/";
   });
 
   // Keep hash in sync with current path for better iframe navigation reloading
   useEffect(() => {
-    const routeName = currentPath.replace("/", "");
+    let routeName = currentPath.replace("/", "");
+    if (currentPath.startsWith("/property-detail/")) {
+      routeName = currentPath.replace("/property-detail/", "property-detail-");
+    }
+    if (currentPath.startsWith("/portal/")) {
+      routeName = currentPath.substring(1); // "portal/admin" etc.
+    }
     window.location.hash = routeName || "home";
   }, [currentPath]);
 
@@ -48,8 +74,17 @@ function AppContent() {
       else if (hash === "about") setCurrentPath("/about");
       else if (hash === "contact") setCurrentPath("/contact");
       else if (hash === "login") setCurrentPath("/login");
-      else if (hash === "register") setCurrentPath("/register");
+      else if (hash === "register") setCurrentPath("/login");
       else if (hash === "forgot-password") setCurrentPath("/forgot-password");
+      else if (hash === "rentals") setCurrentPath("/rentals");
+      else if (hash === "portal/admin" || hash === "portal-admin") setCurrentPath("/portal/admin");
+      else if (hash === "portal/owner" || hash === "portal-owner") setCurrentPath("/portal/owner");
+      else if (hash === "portal/tenant" || hash === "portal-tenant") setCurrentPath("/portal/tenant");
+      else if (hash === "portal/property-manager" || hash === "portal-property-manager") setCurrentPath("/portal/property-manager");
+      else if (hash.startsWith("property-detail-")) {
+        const id = hash.replace("property-detail-", "");
+        setCurrentPath(`/property-detail/${id}`);
+      }
       else setCurrentPath("/");
     };
 
@@ -57,17 +92,33 @@ function AppContent() {
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
-  // Protect dashboard and notifications routes
+  // Protect dashboard and notifications/portal routes
   useEffect(() => {
-    if ((currentPath === "/dashboard" || currentPath === "/notifications") && !currentUser) {
+    const isProtectedRoute = [
+      "/dashboard", 
+      "/notifications", 
+      "/portal/admin", 
+      "/portal/owner", 
+      "/portal/tenant", 
+      "/portal/property-manager"
+    ].includes(currentPath);
+
+    if (isProtectedRoute && !currentUser) {
       setCurrentPath("/login");
     }
   }, [currentPath, currentUser]);
 
   const renderActiveRoute = () => {
+    if (currentPath.startsWith("/property-detail/")) {
+      const propertyId = currentPath.split("/").pop() || "";
+      return <PropertyDetailPage propertyId={propertyId} setCurrentPath={setCurrentPath} />;
+    }
+
     switch (currentPath) {
       case "/":
         return <LandingPage setCurrentPath={setCurrentPath} />;
+      case "/rentals":
+        return <RentalsPage setCurrentPath={setCurrentPath} />;
       case "/services":
         return <ServicesPage setCurrentPath={setCurrentPath} />;
       case "/about":
@@ -75,13 +126,32 @@ function AppContent() {
       case "/contact":
         return <ContactPage />;
       case "/login":
-        return <AuthPages view="login" setView={(v) => setCurrentPath(`/${v}`)} setCurrentPath={setCurrentPath} />;
+        return <AuthPages view="login" setView={(v) => setCurrentPath(`/${v === "register" ? "login" : v}`)} setCurrentPath={setCurrentPath} />;
       case "/register":
-        return <AuthPages view="register" setView={(v) => setCurrentPath(`/${v}`)} setCurrentPath={setCurrentPath} />;
+        return <AuthPages view="login" setView={(v) => setCurrentPath(`/${v === "register" ? "login" : v}`)} setCurrentPath={setCurrentPath} />;
       case "/forgot-password":
-        return <AuthPages view="forgot-password" setView={(v) => setCurrentPath(`/${v}`)} setCurrentPath={setCurrentPath} />;
+        return <AuthPages view="forgot-password" setView={(v) => setCurrentPath(`/${v === "register" ? "login" : v}`)} setCurrentPath={setCurrentPath} />;
+      case "/portal/admin":
+      case "/portal/owner":
+      case "/portal/tenant":
+      case "/portal/property-manager":
       case "/dashboard":
         if (!currentUser) return null;
+        if (currentUser.role === UserRole.TENANT) {
+          return (
+            <TenantPortal
+              currentUser={currentUser}
+              onLogout={async () => {
+                await logout();
+                setCurrentPath("/");
+              }}
+              onBrowseRentals={() => setCurrentPath("/rentals")}
+            />
+          );
+        }
+        if (currentUser.role === UserRole.PROPERTY_MANAGER) {
+          return <PropertyManagerPortal />;
+        }
         return <Dashboard />;
       case "/notifications":
         if (!currentUser) return null;
@@ -91,7 +161,7 @@ function AppContent() {
     }
   };
 
-  const showWebsiteChrome = !["/dashboard", "/login", "/register", "/forgot-password", "/notifications"].includes(currentPath);
+  const showWebsiteChrome = !["/dashboard", "/login", "/register", "/forgot-password", "/notifications"].includes(currentPath) && !currentPath.startsWith("/portal/");
 
   return (
     <div className="flex flex-col min-h-screen">

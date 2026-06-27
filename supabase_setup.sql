@@ -233,3 +233,149 @@ VALUES
 ('n3', 'u1', 'Lease Expiring Soon', 'John Smith''s lease for Oakridge Heights Unit 102 will expire on 2026-07-14 (less than 30 days remaining).', 'Lease', TRUE, '2026-06-15 08:00:00+00'),
 ('n4', 'u2', 'Maintenance Ticket Updated', 'Your ticket ''Leaking kitchen sink pipe'' has been updated to In Progress. A plumber is scheduled for tomorrow morning.', 'Maintenance', FALSE, '2026-06-23 10:00:00+00')
 ON CONFLICT (id) DO NOTHING;
+
+
+-- =========================================================================
+-- 5. NEW TENANT APPLICATION FORM SYSTEM (13 SECTIONS SCHEMA)
+-- =========================================================================
+
+-- Table: applications
+CREATE TABLE IF NOT EXISTS applications (
+    id VARCHAR(100) PRIMARY KEY,
+    user_id VARCHAR(100) REFERENCES users(id) ON DELETE CASCADE,
+    property_id VARCHAR(100) REFERENCES properties(id) ON DELETE SET NULL,
+    property_name VARCHAR(150),
+    manager_name VARCHAR(100),
+    price NUMERIC(12, 2),
+    applied_date DATE DEFAULT CURRENT_DATE,
+    status VARCHAR(50) DEFAULT 'Pending' CHECK (status IN ('Pending', 'Approved', 'Rejected', 'Draft', 'Checking References', 'Identity Verified', 'Owner Approved')),
+    progress INTEGER DEFAULT 20,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+-- Table: personal_info
+CREATE TABLE IF NOT EXISTS personal_info (
+    application_id VARCHAR(100) PRIMARY KEY REFERENCES applications(id) ON DELETE CASCADE,
+    full_name VARCHAR(100) NOT NULL,
+    father_husband_name VARCHAR(100),
+    cnic VARCHAR(30) NOT NULL,
+    dob DATE,
+    gender VARCHAR(20),
+    marital_status VARCHAR(30),
+    nationality VARCHAR(50),
+    religion VARCHAR(50),
+    mother_tongue VARCHAR(50),
+    mobile_number VARCHAR(30),
+    whatsapp_number VARCHAR(30),
+    email_address VARCHAR(150),
+    current_address TEXT,
+    current_city_district VARCHAR(100),
+    current_province VARCHAR(50),
+    emergency_contact_name VARCHAR(100),
+    emergency_contact_relationship VARCHAR(50),
+    emergency_contact_phone VARCHAR(30),
+    encrypted_data TEXT -- Sensitive data encrypted
+);
+
+-- Table: occupants
+CREATE TABLE IF NOT EXISTS occupants (
+    application_id VARCHAR(100) PRIMARY KEY REFERENCES applications(id) ON DELETE CASCADE,
+    total_occupants INTEGER DEFAULT 1,
+    adults_count INTEGER DEFAULT 1,
+    children_count INTEGER DEFAULT 0,
+    pets_in_household VARCHAR(10) DEFAULT 'No',
+    pet_details TEXT,
+    vehicles_count INTEGER DEFAULT 0,
+    vehicle_types TEXT
+);
+
+-- Table: property_requirements
+CREATE TABLE IF NOT EXISTS property_requirements (
+    application_id VARCHAR(100) PRIMARY KEY REFERENCES applications(id) ON DELETE CASCADE,
+    prop_type VARCHAR(50),
+    furnished_status VARCHAR(50),
+    bedrooms INTEGER,
+    bathrooms INTEGER,
+    min_area INTEGER,
+    preferred_floor VARCHAR(50),
+    parking_required VARCHAR(10),
+    parking_count INTEGER,
+    balcony_required VARCHAR(10),
+    garden_required VARCHAR(20),
+    kitchen_type VARCHAR(30),
+    store_room_required VARCHAR(10),
+    ac_required VARCHAR(20),
+    heating_required VARCHAR(20),
+    ups_required VARCHAR(20),
+    generator_required VARCHAR(20),
+    solar_required VARCHAR(20),
+    internet_required VARCHAR(20),
+    cable_required VARCHAR(20),
+    gas_required VARCHAR(20),
+    water_required VARCHAR(20),
+    security_247 VARCHAR(20),
+    cctv_cameras VARCHAR(20),
+    gated_community VARCHAR(20),
+    mosque_nearby VARCHAR(20),
+    park_nearby VARCHAR(20),
+    school_nearby VARCHAR(20),
+    hospital_nearby VARCHAR(20)
+);
+
+-- Table: lease_preferences
+CREATE TABLE IF NOT EXISTS lease_preferences (
+    application_id VARCHAR(100) PRIMARY KEY REFERENCES applications(id) ON DELETE CASCADE,
+    max_monthly_rent NUMERIC(12, 2),
+    min_rent_budget NUMERIC(12, 2),
+    max_rent_budget NUMERIC(12, 2),
+    security_deposit_budget NUMERIC(12, 2),
+    one_time_advance_rent NUMERIC(12, 2),
+    total_move_in_budget NUMERIC(12, 2),
+    preferred_payment_method VARCHAR(50),
+    monthly_income NUMERIC(12, 2),
+    source_of_income VARCHAR(50),
+    employer_name VARCHAR(100),
+    employer_contact VARCHAR(50),
+    occupation VARCHAR(100),
+    job_title VARCHAR(100),
+    years_in_current_job INTEGER,
+    other_income_sources TEXT,
+    preferred_lease_duration VARCHAR(50),
+    preferred_move_in_date DATE,
+    flexibility_move_in_date VARCHAR(50),
+    notice_period_willingness VARCHAR(50),
+    rent_payment_preference VARCHAR(50),
+    preferred_payment_day VARCHAR(20),
+    willingness_pay_in_advance VARCHAR(50),
+    agree_rent_on_time BOOLEAN DEFAULT TRUE,
+    agree_security_deposit BOOLEAN DEFAULT TRUE,
+    agree_maintain_property BOOLEAN DEFAULT TRUE,
+    agree_no_subletting BOOLEAN DEFAULT TRUE,
+    agree_follow_building_rules BOOLEAN DEFAULT TRUE,
+    agree_notice_before_moving BOOLEAN DEFAULT TRUE,
+    agree_allow_inspections BOOLEAN DEFAULT TRUE,
+    agree_no_modifications BOOLEAN DEFAULT TRUE,
+    agree_no_loud_noise BOOLEAN DEFAULT TRUE,
+    agree_no_illegal_activities BOOLEAN DEFAULT TRUE
+);
+
+-- Table: references
+CREATE TABLE IF NOT EXISTS references_list (
+    id SERIAL PRIMARY KEY,
+    application_id VARCHAR(100) REFERENCES applications(id) ON DELETE CASCADE,
+    ref_type VARCHAR(50), -- 'Landlord', 'Professional', 'Personal'
+    name VARCHAR(100),
+    contact VARCHAR(50),
+    relationship VARCHAR(50),
+    details TEXT
+);
+
+-- Table: uploaded_documents
+CREATE TABLE IF NOT EXISTS uploaded_documents (
+    id VARCHAR(100) PRIMARY KEY,
+    application_id VARCHAR(100) REFERENCES applications(id) ON DELETE CASCADE,
+    doc_type VARCHAR(50) NOT NULL, -- 'cnic', 'statement', 'salarySlip', 'photo', 'employerLetter'
+    file_name VARCHAR(255) NOT NULL,
+    file_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);

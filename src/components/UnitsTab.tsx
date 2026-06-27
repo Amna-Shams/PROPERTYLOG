@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Unit, UnitStatus } from "../types";
+import { formatPKR } from "../utils/currency";
 import { 
   Layers, 
   Search, 
@@ -15,6 +16,7 @@ import {
   AlertTriangle 
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+
 
 export const UnitsTab: React.FC = () => {
   const { 
@@ -256,7 +258,7 @@ export const UnitsTab: React.FC = () => {
                         </td>
                         <td className="p-4 font-bold text-slate-900 text-sm">Unit {u.unit_number}</td>
                         <td className="p-4 font-mono text-slate-500">Floor {u.floor}</td>
-                        <td className="p-4 font-mono text-slate-900 font-bold">${u.rent_amount.toLocaleString()}/mo</td>
+                        <td className="p-4 font-mono text-slate-900 font-bold">{formatPKR(u.rent_amount)}/mo</td>
                         <td className="p-4">
                           <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold inline-flex items-center gap-1 border ${
                             u.status === UnitStatus.OCCUPIED 

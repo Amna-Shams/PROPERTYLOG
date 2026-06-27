@@ -23,6 +23,7 @@ import {
   CheckSquare
 } from "lucide-react";
 import { NotificationType, UserRole } from "../types";
+import { formatPKR } from "../utils/currency";
 import { motion, AnimatePresence } from "motion/react";
 
 interface NotificationsPageProps {
@@ -167,7 +168,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({ setCurrent
 
       if (isUpcoming && currentUser.role === UserRole.TENANT && p.tenant_id === currentUser.id) {
         const title = "Monthly Rent Invoice Due";
-        const message = `Your monthly rent payment of $${p.amount.toLocaleString()} for Unit ${p.unit_number} is due soon on ${p.due_date}.`;
+        const message = `Your monthly rent payment of ${formatPKR(p.amount)} for Unit ${p.unit_number} is due soon on ${p.due_date}.`;
         
         if (!privateNotifications.some(n => n.title === title)) {
           addNotification(title, message, NotificationType.PAYMENT);
@@ -177,7 +178,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({ setCurrent
 
       if (isOverdue && currentUser.role === UserRole.TENANT && p.tenant_id === currentUser.id) {
         const title = "URGENT: Rent Overdue Alert";
-        const message = `Your monthly rent payment of $${p.amount.toLocaleString()} for Unit ${p.unit_number} was due on ${p.due_date} and is now OVERDUE. Please submit payment immediately to avoid late fees.`;
+        const message = `Your monthly rent payment of ${formatPKR(p.amount)} for Unit ${p.unit_number} was due on ${p.due_date} and is now OVERDUE. Please submit payment immediately to avoid late fees.`;
         
         if (!privateNotifications.some(n => n.title === title)) {
           addNotification(title, message, NotificationType.PAYMENT);

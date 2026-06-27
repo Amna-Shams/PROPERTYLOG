@@ -6,7 +6,8 @@
 export enum UserRole {
   ADMIN = "Admin",
   OWNER = "Owner",
-  TENANT = "Tenant"
+  TENANT = "Tenant",
+  PROPERTY_MANAGER = "Property Manager"
 }
 
 export interface UserProfile {
@@ -197,4 +198,17 @@ export interface ContactInquiry {
   phone: string;
   message: string;
   created_at: string;
+}
+
+export interface Application {
+  id: string;
+  propertyId: string;
+  propertyName: string;
+  managerName: string;
+  price: number;
+  appliedDate: string;
+  status: string; // 'Pending' | 'Approved' | 'Rejected' | 'Draft' | 'Checking References' | 'Identity Verified' | 'Owner Approved' | 'Contract Signed'
+  progress: number;
+  documents: Record<string, string>; // base64 or file name references
+  details: Record<string, any>; // multi-section form data
 }

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Lease, LeaseStatus, UnitStatus } from "../types";
+import { formatPKR } from "../utils/currency";
 import { 
   FileText, 
   Search, 
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
+
 export const LeasesTab: React.FC = () => {
   const { 
     leases, 
@@ -27,7 +29,8 @@ export const LeasesTab: React.FC = () => {
     updateLease, 
     deleteLease, 
     currentUser, 
-    showToast 
+    showToast,
+    properties
   } = useApp();
 
   const isTenant = currentUser?.role === "Tenant";
@@ -275,8 +278,8 @@ export const LeasesTab: React.FC = () => {
                         </td>
                         <td className="p-4">
                           <div className="font-mono">
-                            <p className="font-extrabold text-slate-900">${l.rent_amount.toLocaleString()}/mo</p>
-                            <p className="text-[10px] text-slate-500">Sec. Dep: ${l.deposit_amount.toLocaleString()}</p>
+                            <p className="font-extrabold text-slate-900">{formatPKR(l.rent_amount)}/mo</p>
+                            <p className="text-[10px] text-slate-500">Sec. Dep: {formatPKR(l.deposit_amount)}</p>
                           </div>
                         </td>
                         <td className="p-4">
@@ -493,11 +496,11 @@ export const LeasesTab: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-3 p-2">
                     <span className="col-span-1 font-bold">Monthly Rental Amount:</span>
-                    <span className="col-span-2 font-mono font-bold">${pdfLease.rent_amount.toLocaleString()} USD</span>
+                    <span className="col-span-2 font-mono font-bold">{formatPKR(pdfLease.rent_amount)}</span>
                   </div>
                   <div className="grid grid-cols-3 p-2">
                     <span className="col-span-1 font-bold">Security Deposit:</span>
-                    <span className="col-span-2 font-mono font-bold">${pdfLease.deposit_amount.toLocaleString()} USD</span>
+                    <span className="col-span-2 font-mono font-bold">{formatPKR(pdfLease.deposit_amount)}</span>
                   </div>
                 </div>
 
