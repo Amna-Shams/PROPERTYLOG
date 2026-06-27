@@ -17,15 +17,18 @@ import {
   Eye,
   CheckCircle2
 } from "lucide-react";
-import { RENTAL_PROPERTIES, RentalProperty } from "../data/rentalProperties";
+import { RentalProperty } from "../data/rentalProperties";
 import { formatPKR } from "../utils/currency";
 import { motion, AnimatePresence } from "motion/react";
+import { useApp } from "../context/AppContext";
 
 interface RentalsPageProps {
   setCurrentPath: (path: string) => void;
 }
 
 export const RentalsPage: React.FC<RentalsPageProps> = ({ setCurrentPath }) => {
+  const { rentalProperties } = useApp();
+
   // Search and Filter States
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCity, setSelectedCity] = useState("All");
@@ -61,18 +64,18 @@ export const RentalsPage: React.FC<RentalsPageProps> = ({ setCurrentPath }) => {
 
   // Extract cities and types dynamically
   const citiesList = useMemo(() => {
-    const cities = RENTAL_PROPERTIES.map(p => p.city);
+    const cities = rentalProperties.map(p => p.city);
     return ["All", ...Array.from(new Set(cities))];
-  }, []);
+  }, [rentalProperties]);
 
   const typesList = useMemo(() => {
-    const types = RENTAL_PROPERTIES.map(p => p.property_type);
+    const types = rentalProperties.map(p => p.property_type);
     return ["All", ...Array.from(new Set(types))];
-  }, []);
+  }, [rentalProperties]);
 
   // Filter and Sort properties
   const filteredProperties = useMemo(() => {
-    return RENTAL_PROPERTIES.filter(property => {
+    return rentalProperties.filter(property => {
       // Keyword search (title, description, area, city, landmarks)
       const matchesSearch = searchQuery === "" || 
         property.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -104,7 +107,7 @@ export const RentalsPage: React.FC<RentalsPageProps> = ({ setCurrentPath }) => {
       if (sortBy === "views") return (b.views + (viewedProperties[b.id] || 0)) - (a.views + (viewedProperties[a.id] || 0));
       return b.favorites_count - a.favorites_count; // Featured default
     });
-  }, [searchQuery, selectedCity, selectedType, priceRange, selectedBeds, selectedFurnished, sortBy, viewedProperties]);
+  }, [rentalProperties, searchQuery, selectedCity, selectedType, priceRange, selectedBeds, selectedFurnished, sortBy, viewedProperties]);
 
   const resetFilters = () => {
     setSearchQuery("");

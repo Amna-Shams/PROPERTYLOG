@@ -31,7 +31,7 @@ import {
   Building,
   CheckCircle2
 } from "lucide-react";
-import { RENTAL_PROPERTIES, RentalProperty } from "../data/rentalProperties";
+import { RentalProperty } from "../data/rentalProperties";
 import { formatPKR } from "../utils/currency";
 import { useApp } from "../context/AppContext";
 import { motion, AnimatePresence } from "motion/react";
@@ -42,12 +42,12 @@ interface PropertyDetailPageProps {
 }
 
 export const PropertyDetailPage: React.FC<PropertyDetailPageProps> = ({ propertyId, setCurrentPath }) => {
-  const { addContactInquiry, showToast } = useApp();
+  const { addContactInquiry, showToast, rentalProperties } = useApp();
   
   // Find active property
   const property = useMemo(() => {
-    return RENTAL_PROPERTIES.find(p => p.id === propertyId) || RENTAL_PROPERTIES[0];
-  }, [propertyId]);
+    return rentalProperties.find(p => p.id === propertyId) || rentalProperties[0];
+  }, [propertyId, rentalProperties]);
 
   // Gallery Active Image
   const [activeImageIdx, setActiveImageIdx] = useState(0);
@@ -89,10 +89,10 @@ export const PropertyDetailPage: React.FC<PropertyDetailPageProps> = ({ property
 
   // Similar listings (same city or same property type)
   const similarListings = useMemo(() => {
-    return RENTAL_PROPERTIES
+    return rentalProperties
       .filter(p => p.id !== property.id && (p.city === property.city || p.property_type === property.property_type))
       .slice(0, 3);
-  }, [property]);
+  }, [property, rentalProperties]);
 
   // Inquiry Form state
   const [inquiryName, setInquiryName] = useState("");

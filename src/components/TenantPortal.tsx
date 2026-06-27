@@ -35,12 +35,17 @@ import {
   PenTool,
   ShieldCheck,
   Activity,
-  Paperclip
+  Paperclip,
+  Search,
+  Trash2,
+  ArrowLeft,
+  Play
 } from "lucide-react";
 import { formatPKR } from "../utils/currency";
-import { RENTAL_PROPERTIES, RentalProperty } from "../data/rentalProperties";
+import { RentalProperty } from "../data/rentalProperties";
 import { TenantApplicationForm } from "./TenantApplicationForm";
 import { useApp } from "../context/AppContext";
+import { decryptAES256 } from "../utils/crypto";
 
 interface TenantPortalProps {
   currentUser: any;
@@ -83,7 +88,7 @@ export const TenantPortal: React.FC<TenantPortalProps> = ({
   onLogout,
   onBrowseRentals 
 }) => {
-  const [activeTab, setActiveTab] = useState<"overview" | "applications" | "favorites" | "messages" | "alerts" | "profile" | "rent" | "maintenance" | "documents">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "applications" | "favorites" | "messages" | "profile" | "rent" | "maintenance" | "documents">("overview");
 
   // Rent & Financials State
   const [autopaySetup, setAutopaySetup] = useState({
@@ -296,10 +301,48 @@ Thank you for your prompt rent payment!
   };
 
   // High fidelity application state (Phase 3 & 4) - Consumed from global AppContext
-  const { applications, addApplication } = useApp();
+  const { applications, addApplication, rentalProperties } = useApp();
 
   // Selected property for applying
   const [selectedPropToApply, setSelectedPropToApply] = useState<RentalProperty | null>(null);
+  
+  // Custom states for Tenant Application Form Integration
+  const [showStartNewSelector, setShowStartNewSelector] = useState(false);
+  const [selectedAppForView, setSelectedAppForView] = useState<any | null>(null);
+  const [savedDraft, setSavedDraft] = useState<any | null>(null);
+  const [viewTab, setViewTab] = useState<"reqs" | "personal" | "financial" | "documents">("reqs");
+  const [propSearchQuery, setPropSearchQuery] = useState("");
+
+  // Sync draft from localStorage
+  useEffect(() => {
+    const draftKey = `pl_draft_app_${currentUser?.id || "anonymous"}`;
+    const localDraft = localStorage.getItem(draftKey);
+    if (localDraft) {
+      try {
+        setSavedDraft(JSON.parse(localDraft));
+      } catch (e) {
+        console.error("Error parsing local draft", e);
+      }
+    } else {
+      setSavedDraft(null);
+    }
+  }, [activeTab, selectedPropToApply]);
+
+  const handleContinueDraft = () => {
+    if (savedDraft && savedDraft.formData) {
+      const propId = savedDraft.formData.propertyId || "rent-1";
+      const matched = rentalProperties.find(p => p.id === propId) || rentalProperties[0];
+      setSelectedPropToApply(matched);
+      triggerPush("Draft Loaded", "Resuming your encrypted 13-section application progress.", "check");
+    }
+  };
+
+  const handleDiscardDraft = () => {
+    const draftKey = `pl_draft_app_${currentUser?.id || "anonymous"}`;
+    localStorage.removeItem(draftKey);
+    setSavedDraft(null);
+    triggerPush("Draft Cleared", "The application draft has been deleted from cache.", "trash");
+  };
 
   // Favorites state (Syncing with Discovery)
   const [favorites, setFavorites] = useState<RentalProperty[]>([]);
@@ -347,21 +390,7 @@ Thank you for your prompt rent payment!
     { id: "todo-5", text: "Digitally sign the general terms authorization", completed: false }
   ]);
 
-  // Alert preferences (Phase 6)
-  const [alertSettings, setAlertSettings] = useState({
-    quietHours: true,
-    quietStart: "22:00",
-    quietEnd: "08:00",
-    locationAlerts: "Lahore - DHA, Gulberg",
-    minPrice: 50000,
-    maxPrice: 250000,
-    channels: {
-      email: true,
-      whatsapp: true,
-      sms: false,
-      push: true
-    }
-  });
+
 
   // Profile preferences (Phase 7)
   const [profileData, setProfileData] = useState({
@@ -382,17 +411,17 @@ Thank you for your prompt rent payment!
     if (savedFavIds) {
       try {
         const ids = JSON.parse(savedFavIds) as string[];
-        favList = RENTAL_PROPERTIES.filter(p => ids.includes(p.id));
+        favList = rentalProperties.filter(p => ids.includes(p.id));
       } catch (e) {
         console.error(e);
       }
     }
     // If empty, pre-populate with two properties to make the UI look premium
     if (favList.length === 0) {
-      favList = RENTAL_PROPERTIES.slice(0, 2);
+      favList = rentalProperties.slice(0, 2);
     }
     setFavorites(favList);
-  }, []);
+  }, [rentalProperties]);
 
   const handleApplyFromFavorites = (property: RentalProperty) => {
     setSelectedPropToApply(property);
@@ -490,7 +519,7 @@ Thank you for your prompt rent payment!
   const activeConv = conversations.find(c => c.id === selectedConvId);
 
   // Filter recommendations based on tenant city & budget
-  const recommendations = RENTAL_PROPERTIES.filter(p => 
+  const recommendations = rentalProperties.filter(p => 
     p.city.toLowerCase() === profileData.city.toLowerCase() && 
     p.price <= profileData.preferredBudget * 1.5
   ).slice(0, 3);
@@ -515,17 +544,6 @@ Thank you for your prompt rent payment!
             </div>
           </div>
 
-          {/* Quick Stats banner */}
-          <div className="p-4 bg-slate-950/40 border-b border-slate-800/50 space-y-2">
-            <div className="flex justify-between items-center text-[11px] text-slate-400">
-              <span>Matching Score</span>
-              <span className="font-bold text-blue-400">92% Match</span>
-            </div>
-            <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-blue-500 to-emerald-400 rounded-full" style={{ width: "92%" }} />
-            </div>
-          </div>
-
           {/* Sidebar Nav links */}
           <nav className="p-4 space-y-1">
             <button
@@ -544,14 +562,14 @@ Thank you for your prompt rent payment!
               onClick={() => { setActiveTab("applications"); setSelectedPropToApply(null); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all border ${
                 activeTab === "applications"
-                  ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                   : "border-transparent text-slate-400 hover:bg-slate-800/50 hover:text-white"
               }`}
             >
-              <FileText className="h-4.5 w-4.5" />
+              <FileText className="h-4.5 w-4.5 text-emerald-400" />
               <div className="flex-1 flex justify-between items-center">
-                <span>Lease Applications</span>
-                <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300 font-mono">
+                <span>Tenant Application Form</span>
+                <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-emerald-400 font-mono">
                   {applications.length}
                 </span>
               </div>
@@ -642,18 +660,6 @@ Thank you for your prompt rent payment!
             </button>
 
             <button
-              onClick={() => { setActiveTab("alerts"); setSelectedPropToApply(null); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all border ${
-                activeTab === "alerts"
-                  ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                  : "border-transparent text-slate-400 hover:bg-slate-800/50 hover:text-white"
-              }`}
-            >
-              <Bell className="h-4.5 w-4.5 text-amber-400" />
-              <span>Smart Alerts &amp; Rules</span>
-            </button>
-
-            <button
               onClick={() => { setActiveTab("profile"); setSelectedPropToApply(null); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all border ${
                 activeTab === "profile"
@@ -695,10 +701,9 @@ Thank you for your prompt rent payment!
             <span className="text-[10px] font-extrabold uppercase tracking-widest text-blue-600 font-mono">Verified Tenant Portal</span>
             <h1 className="font-display font-black text-2xl tracking-tight text-slate-900">
               {activeTab === "overview" && `Welcome Back, ${profileData.fullName.split(" ")[0]}`}
-              {activeTab === "applications" && "Your Rental Applications"}
+              {activeTab === "applications" && "Tenant Application Form"}
               {activeTab === "favorites" && "Your Saved Homes"}
               {activeTab === "messages" && "Landlord Messaging Hub"}
-              {activeTab === "alerts" && "Smart Notification Rules"}
               {activeTab === "profile" && "Tenant Profile & Preferences"}
               {activeTab === "rent" && "Rent & Financial Hub"}
               {activeTab === "maintenance" && "Maintenance Dispatch Center"}
@@ -706,10 +711,9 @@ Thank you for your prompt rent payment!
             </h1>
             <p className="text-xs text-slate-500">
               {activeTab === "overview" && "Submit verification details, track your active leases, or talk with land managers."}
-              {activeTab === "applications" && "View state check-ins, reference investigations, and digital contracts."}
+              {activeTab === "applications" && "Submit digital rental applications, resume draft forms, track progress, and communicate with property managers."}
               {activeTab === "favorites" && "Compare pre-selected listings or submit a formal application instantly."}
               {activeTab === "messages" && "Instant secure correspondence with verification templates and guidelines."}
-              {activeTab === "alerts" && "Set active price targets, area triggers, and silent timing locks."}
               {activeTab === "profile" && "Fine-tune target criteria, furnishing priorities, and verify CNIC."}
               {activeTab === "rent" && "Pay secure monthly rent via simulated Stripe / ACH, configure auto-draft, and build credit history."}
               {activeTab === "maintenance" && "File requests with image uploads, monitor real-time contractor dispatches, and signal emergency items."}
@@ -842,7 +846,7 @@ Thank you for your prompt rent payment!
                   {/* Recommended Listings (Discovery Match) */}
                   <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm space-y-4">
                     <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-yellow-500" /> Matchmaking Recommended Properties ({profileData.city})
+                      <Sparkles className="h-4 w-4 text-yellow-500" /> Recommended Properties ({profileData.city})
                     </h3>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -970,89 +974,580 @@ Thank you for your prompt rent payment!
             {/* APPLICATIONS TAB */}
             {activeTab === "applications" && (
               <div className="bg-white border border-slate-100 rounded-3xl p-6 md:p-8 shadow-sm space-y-6">
-                <div className="border-b border-slate-100 pb-4">
-                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Active Verification Pipelines</h3>
-                  <p className="text-xs text-slate-500">Below are standard DHA / Gated community leasing processes submitted on your account.</p>
-                </div>
-
-                {applications.map((app) => (
-                  <div key={app.id} className="border border-slate-100 rounded-2xl p-5 space-y-5 shadow-sm">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 p-4 rounded-xl">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-100 text-blue-600 rounded-xl">
-                          <Building className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <h4 className="text-xs font-bold text-slate-900">{app.propertyName}</h4>
-                          <span className="text-[10px] text-slate-500">Manager: {app.managerName} &bull; Reference Code: {app.id}</span>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <span className="px-2.5 py-1 rounded-full bg-blue-50 text-[10px] font-bold text-blue-600 border border-blue-100">
-                          {app.status}
-                        </span>
-                        <span className="text-[10px] text-slate-400">Rent budget: {formatPKR(app.price)}/mo</span>
+                
+                {/* STATE 2: START NEW APPLICATION SELECTOR */}
+                {showStartNewSelector ? (
+                  <div className="space-y-6 animate-fade-in">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+                      <div>
+                        <button
+                          onClick={() => setShowStartNewSelector(false)}
+                          className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors"
+                        >
+                          <ArrowLeft className="h-4 w-4" />
+                          Back to Applications Dashboard
+                        </button>
+                        <h3 className="text-base font-black text-slate-900 mt-2">Select a Target Property</h3>
+                        <p className="text-xs text-slate-500">Pick a property to pre-fill standard DHA housing association guidelines & lease requirements.</p>
                       </div>
                     </div>
 
-                    {/* Timeline Tracker */}
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold">
-                        <span>Application Progress</span>
-                        <span>{app.progress}% Completed</span>
-                      </div>
-                      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-blue-600 rounded-full transition-all duration-500" style={{ width: `${app.progress}%` }} />
-                      </div>
+                    {/* Search and Filters */}
+                    <div className="relative">
+                      <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search properties by title, city, province, or landmark..."
+                        value={propSearchQuery}
+                        onChange={(e) => setPropSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-emerald-500 focus:bg-white transition-all text-slate-800"
+                      />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 pt-2">
-                      {[
-                        { label: "Submitted", desc: "Form filled & CNIC details received", done: app.progress >= 20 },
-                        { label: "Identity Verified", desc: "Government verification successful", done: app.progress >= 40 },
-                        { label: "Reference Check", desc: "Previous landlord contacted", done: app.progress >= 60 },
-                        { label: "Owner Approved", desc: "Lease conditions signed by landlord", done: app.progress >= 80 },
-                        { label: "Contract Signed", desc: "Mutual contract finalized", done: app.progress >= 100 }
-                      ].map((step, sIdx) => (
-                        <div key={sIdx} className={`p-3 border rounded-xl space-y-1 transition-all ${
-                          step.done ? "bg-blue-50/20 border-blue-100 text-slate-800" : "bg-slate-50/50 border-slate-100 text-slate-400"
-                        }`}>
-                          <div className="flex items-center gap-1.5">
-                            {step.done ? (
-                              <CheckCircle2 className="h-3.5 w-3.5 text-blue-600" />
-                            ) : (
-                              <Clock className="h-3.5 w-3.5" />
-                            )}
-                            <span className="text-[10px] font-bold">{step.label}</span>
+                    {/* Properties Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {rentalProperties.filter(p =>
+                        p.title.toLowerCase().includes(propSearchQuery.toLowerCase()) ||
+                        p.city.toLowerCase().includes(propSearchQuery.toLowerCase()) ||
+                        p.area.toLowerCase().includes(propSearchQuery.toLowerCase())
+                      ).map((prop) => {
+                        const isFav = favorites.some(f => f.id === prop.id);
+                        return (
+                          <div key={prop.id} className="border border-slate-100 bg-slate-50/50 hover:bg-slate-50 rounded-2xl p-4 flex gap-4 transition-all hover:border-slate-200">
+                            <div className="h-20 w-24 bg-slate-200 rounded-xl overflow-hidden flex-shrink-0 relative">
+                              <img
+                                src={prop.images?.[0] || "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=600&q=80"}
+                                alt={prop.title}
+                                referrerPolicy="no-referrer"
+                                className="h-full w-full object-cover"
+                              />
+                              {isFav && (
+                                <span className="absolute top-1 left-1.5 bg-rose-500 text-white text-[8px] font-extrabold px-1.5 py-0.5 rounded-full">
+                                  Shortlisted
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex-1 flex flex-col justify-between min-w-0">
+                              <div>
+                                <h4 className="text-xs font-bold text-slate-900 truncate">{prop.title}</h4>
+                                <span className="text-[10px] text-slate-500 block truncate">{prop.area}, {prop.city}</span>
+                                <span className="text-[10px] font-mono text-emerald-600 font-bold mt-1 block">
+                                  {formatPKR(prop.price)}/month
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setSelectedPropToApply(prop);
+                                  setShowStartNewSelector(false);
+                                  triggerPush("Wizard Launched", `Started 13-section rental application for ${prop.title}.`, "check");
+                                }}
+                                className="w-full mt-2 py-1.5 bg-[#1B8A3F] hover:bg-[#156e31] text-white rounded-lg text-[10px] font-extrabold tracking-wider uppercase transition-all flex items-center justify-center gap-1"
+                              >
+                                <Play className="h-3 w-3 fill-white" /> Start 13-Step Application
+                              </button>
+                            </div>
                           </div>
-                          <p className="text-[9px] leading-tight font-light">{step.desc}</p>
-                        </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : selectedAppForView ? (
+                  <div className="space-y-6 animate-fade-in">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                      <div>
+                        <button
+                          onClick={() => setSelectedAppForView(null)}
+                          className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors"
+                        >
+                          <ArrowLeft className="h-4 w-4" />
+                          Back to Applications Dashboard
+                        </button>
+                        <h3 className="text-base font-black text-slate-900 mt-2">
+                          Application Summary &bull; {selectedAppForView.id}
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          {selectedAppForView.propertyName} &bull; DHA Registered Reference Code
+                        </p>
+                      </div>
+
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${
+                        selectedAppForView.status === "Approved"
+                          ? "bg-emerald-50 border-emerald-200 text-emerald-600"
+                          : selectedAppForView.status === "Rejected"
+                          ? "bg-rose-50 border-rose-200 text-rose-600"
+                          : "bg-amber-50 border-amber-200 text-amber-600"
+                      }`}>
+                        Status: {selectedAppForView.status}
+                      </span>
+                    </div>
+
+                    {/* Horizontal view sub-tabs */}
+                    <div className="flex border-b border-slate-100 gap-2 overflow-x-auto pb-1">
+                      {[
+                        { id: "reqs", label: "Property & Lease Reqs" },
+                        { id: "personal", label: "Personal & Occupants" },
+                        { id: "financial", label: "Financial & References" },
+                        { id: "documents", label: "Documents & Signature" }
+                      ].map((tb) => (
+                        <button
+                          key={tb.id}
+                          onClick={() => setViewTab(tb.id as any)}
+                          className={`px-4 py-2 text-xs font-bold whitespace-nowrap border-b-2 transition-all ${
+                            viewTab === tb.id
+                              ? "border-[#1B8A3F] text-[#1B8A3F]"
+                              : "border-transparent text-slate-400 hover:text-slate-700"
+                          }`}
+                        >
+                          {tb.label}
+                        </button>
                       ))}
                     </div>
 
-                    {/* Active Attachments list */}
-                    <div className="border-t border-slate-100 pt-4 flex flex-wrap items-center justify-between gap-4">
-                      <div className="flex flex-wrap gap-2">
-                        {Object.entries(app.documents).map(([key, name]) => (
-                          <span key={key} className="inline-flex items-center gap-1 text-[10px] bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-600 px-2.5 py-1 rounded-lg">
-                            <Check className="h-3 w-3 text-emerald-600" /> {key.toUpperCase()}: {name}
-                          </span>
-                        ))}
-                      </div>
+                    {/* View Details Contents */}
+                    <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 space-y-6">
+                      
+                      {/* TAB 1: PROPERTY & LEASE */}
+                      {viewTab === "reqs" && (
+                        <div className="space-y-4">
+                          <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Target Leasing Specifications</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[10px] text-slate-400 block font-medium">Property Category</span>
+                              <span className="text-xs font-bold text-slate-800">{selectedAppForView.details?.propType || "Residential House"}</span>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[10px] text-slate-400 block font-medium">Beds / Baths</span>
+                              <span className="text-xs font-bold text-slate-800">{selectedAppForView.details?.bedrooms || 3} Beds &bull; {selectedAppForView.details?.bathrooms || 3} Baths</span>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[10px] text-slate-400 block font-medium">Rent Budget Plan</span>
+                              <span className="text-xs font-bold text-emerald-600 font-mono">{formatPKR(selectedAppForView.price || 150000)}/mo</span>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[10px] text-slate-400 block font-medium">Preferred Location</span>
+                              <span className="text-xs font-bold text-slate-800">{selectedAppForView.details?.preferredAreas || "DHA Gated Sector"}</span>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[10px] text-slate-400 block font-medium">Target Lease Duration</span>
+                              <span className="text-xs font-bold text-slate-800">{selectedAppForView.details?.leaseDuration || "12 Months"}</span>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[10px] text-slate-400 block font-medium">Planned Move-In Date</span>
+                              <span className="text-xs font-bold text-slate-800">{selectedAppForView.details?.moveInDate || "2026-07-15"}</span>
+                            </div>
+                          </div>
 
-                      <button
-                        onClick={() => {
-                          setSelectedConvId("conv-1");
-                          setActiveTab("messages");
-                        }}
-                        className="px-4 py-1.5 border border-blue-200 hover:bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold transition-all"
-                      >
-                        Message {app.managerName}
-                      </button>
+                          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm space-y-3">
+                            <h5 className="text-[11px] font-bold text-slate-700 uppercase">Requested Utilities &amp; Infrastructure</h5>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              {[
+                                { key: "acRequired", label: "Air Conditioning" },
+                                { key: "upsRequired", label: "Inverter / UPS Backup" },
+                                { key: "solarRequired", label: "Solar Energy System" },
+                                { key: "generatorRequired", label: "Standby Generator" },
+                                { key: "parkingRequired", label: "Car Parking Port" },
+                                { key: "waterFilterRequired", label: "RO Water Filter" },
+                                { key: "gasRequired", label: "Natural Sui Gas Connection" },
+                                { key: "internetRequired", label: "High-Speed Fiber Optic" }
+                              ].map((item) => {
+                                const val = selectedAppForView.details?.[item.key];
+                                const active = val === "Yes" || val === true;
+                                return (
+                                  <div key={item.key} className={`p-2 rounded-lg border text-[10px] font-medium flex items-center gap-1.5 ${
+                                    active ? "bg-emerald-50/40 border-emerald-100 text-emerald-800" : "bg-slate-50/50 border-slate-100 text-slate-400"
+                                  }`}>
+                                    <Check className={`h-3 w-3 ${active ? "text-emerald-600" : "text-slate-300"}`} />
+                                    {item.label}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TAB 2: PERSONAL */}
+                      {viewTab === "personal" && (
+                        <div className="space-y-4">
+                          <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Demographic &amp; Primary Contact Data</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[10px] text-slate-400 block font-medium">Primary Applicant Name</span>
+                              <span className="text-xs font-bold text-slate-800">{selectedAppForView.details?.fullName || "Amna Ch Shams"}</span>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[10px] text-slate-400 block font-medium">Father / Husband Name</span>
+                              <span className="text-xs font-bold text-slate-800">{selectedAppForView.details?.fatherHusbandName || "Shams-ud-din"}</span>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[10px] text-rose-400 block font-medium font-mono flex items-center gap-1">
+                                <Lock className="h-2.5 w-2.5" /> CNIC Card (Symmetrically Decrypted)
+                              </span>
+                              <span className="text-xs font-bold text-slate-800 font-mono">
+                                {decryptAES256(selectedAppForView.details?.cnic || "") || "42101-9283712-1"}
+                              </span>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[10px] text-slate-400 block font-medium">Date of Birth</span>
+                              <span className="text-xs font-bold text-slate-800">{selectedAppForView.details?.dob || "1994-11-03"}</span>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[10px] text-rose-400 block font-medium font-mono flex items-center gap-1">
+                                <Lock className="h-2.5 w-2.5" /> Mobile Contact
+                              </span>
+                              <span className="text-xs font-bold text-slate-800 font-mono">
+                                {decryptAES256(selectedAppForView.details?.mobileNumber || "") || "0300-1234567"}
+                              </span>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[10px] text-slate-400 block font-medium">Email Address</span>
+                              <span className="text-xs font-bold text-slate-800">{selectedAppForView.details?.emailAddress || currentUser?.email || "amnachshams@gmail.com"}</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm space-y-2">
+                              <h5 className="text-[11px] font-bold text-slate-700 uppercase">Emergency Correspondence Contact</h5>
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div>
+                                  <span className="text-[10px] text-slate-400 block">Name &amp; Relationship</span>
+                                  <span className="font-bold text-slate-800">{selectedAppForView.details?.emergencyContactName || "Bilal Shams"} ({selectedAppForView.details?.emergencyContactRelationship || "Brother"})</span>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] text-slate-400 block">Contact Phone</span>
+                                  <span className="font-bold font-mono text-slate-800">{selectedAppForView.details?.emergencyContactPhone || "0321-9876543"}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm space-y-2">
+                              <h5 className="text-[11px] font-bold text-slate-700 uppercase">Household Occupancy</h5>
+                              <div className="grid grid-cols-3 gap-2 text-xs">
+                                <div>
+                                  <span className="text-[10px] text-slate-400 block">Total Cohabitants</span>
+                                  <span className="font-bold text-slate-800">{selectedAppForView.details?.totalOccupants || 4} Members</span>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] text-slate-400 block">Domestic Pets</span>
+                                  <span className="font-bold text-slate-800">{selectedAppForView.details?.petsInHousehold || "No"}</span>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] text-slate-400 block">Vehicles &amp; Parking</span>
+                                  <span className="font-bold text-slate-800">{selectedAppForView.details?.vehiclesCount || 2} Car(s)</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TAB 3: FINANCIAL & REFS */}
+                      {viewTab === "financial" && (
+                        <div className="space-y-4">
+                          <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Employment Details &amp; References</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[10px] text-rose-400 block font-medium font-mono flex items-center gap-1">
+                                <Lock className="h-2.5 w-2.5" /> Net Monthly Income
+                              </span>
+                              <span className="text-xs font-bold text-emerald-600 font-mono">
+                                {formatPKR(Number(decryptAES256(selectedAppForView.details?.monthlyIncome || "")) || (selectedAppForView.price * 3))}
+                              </span>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[10px] text-slate-400 block font-medium">Occupation &amp; Title</span>
+                              <span className="text-xs font-bold text-slate-800">{selectedAppForView.details?.occupation || "Senior Software Architect"}</span>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[10px] text-slate-400 block font-medium">Employer / Organization</span>
+                              <span className="text-xs font-bold text-slate-800">{selectedAppForView.details?.employerName || "TechLogix Global"}</span>
+                            </div>
+                          </div>
+
+                          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm space-y-3">
+                            <h5 className="text-[11px] font-bold text-slate-700 uppercase border-b border-slate-50 pb-2">Verification References</h5>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                              <div className="space-y-1">
+                                <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">Primary Landlord Reference</span>
+                                <p className="font-bold text-slate-800">{selectedAppForView.details?.ref1Name || "Zubair Hashmi"} (Former Owner)</p>
+                                <p className="text-[10px] text-slate-500">Contact: {selectedAppForView.details?.ref1Contact || "0312-4567890"}</p>
+                                <p className="text-[10px] text-slate-500 leading-tight">Property Address: {selectedAppForView.details?.ref1PropertyAddress || "House 12-A, DHA Phase 3, Lahore"}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">Employer Verification Reference</span>
+                                <p className="font-bold text-slate-800">{selectedAppForView.details?.ref2Name || "Nadia Malik"} (Tech HR Lead)</p>
+                                <p className="text-[10px] text-slate-500">Contact: {selectedAppForView.details?.ref2Contact || "0333-1212343"}</p>
+                                <p className="text-[10px] text-slate-500">Designation: {selectedAppForView.details?.ref2Designation || "Director Human Resources"}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TAB 4: DOCS & SIGNATURES */}
+                      {viewTab === "documents" && (
+                        <div className="space-y-4">
+                          <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Secure Document Repository &amp; Signatures</h4>
+                          
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm space-y-3">
+                              <h5 className="text-[11px] font-bold text-slate-700 uppercase">Government ID &amp; Financial Slips</h5>
+                              <div className="space-y-2">
+                                {Object.entries(selectedAppForView.documents).map(([key, name]) => (
+                                  <div key={key} className="flex items-center justify-between text-[11px] bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                    <span className="font-bold text-slate-600 font-mono text-[10px] uppercase">{key}</span>
+                                    <span className="text-slate-500 truncate max-w-[150px]">{String(name)}</span>
+                                    <span className="text-[9px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-extrabold font-mono uppercase">
+                                      Stored S3
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-between">
+                              <div>
+                                <h5 className="text-[11px] font-bold text-slate-700 uppercase">E-Signature Authentication</h5>
+                                <p className="text-[10px] text-slate-400 mt-1 leading-normal">
+                                  Digitally signed in conformity with PECA (Prevention of Electronic Crimes Act) bylaws. Timestamp recorded.
+                                </p>
+                              </div>
+                              
+                              <div className="mt-4 border border-slate-200 border-dashed rounded-xl p-3 bg-slate-50 flex flex-col items-center justify-center min-h-[100px] relative">
+                                {selectedAppForView.signature ? (
+                                  <img
+                                    src={selectedAppForView.signature}
+                                    alt="Client Digital Signature"
+                                    className="max-h-[80px] object-contain"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                ) : (
+                                  <span className="text-slate-400 font-mono text-xs italic">Amna Shams (Draw Sign)</span>
+                                )}
+                                <span className="absolute bottom-1 right-2 text-[8px] font-mono text-slate-400">
+                                  Secure Hash verified
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                     </div>
                   </div>
-                ))}
+                ) : (
+                  <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+                      <div>
+                        <h3 className="text-base font-black text-slate-900">Digital Applications Portfolio</h3>
+                        <p className="text-xs text-slate-500">Track real-time reference checking pipelines and government-grade background investigations.</p>
+                      </div>
+                      <button
+                        onClick={() => setShowStartNewSelector(true)}
+                        className="px-4 py-2 bg-[#1B8A3F] hover:bg-[#156e31] text-white text-xs font-bold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-1.5 self-start"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Start New Application
+                      </button>
+                    </div>
+
+                    {/* DRAFTS SECTION */}
+                    {savedDraft && (
+                      <div className="border border-amber-200 bg-amber-50/20 rounded-2xl p-5 space-y-3 shadow-sm border-l-4 border-l-[#D4A843]">
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#D4A843] font-mono block">In-Progress Application Draft</span>
+                            <h4 className="text-xs font-bold text-slate-900">
+                              {savedDraft.formData?.propertyName || "DHA Gated Sector Villa"}
+                            </h4>
+                            <p className="text-[10px] text-slate-500">
+                              Section {savedDraft.step || 1} of 13 completed &bull; Autocached: 30s intervals.
+                            </p>
+                          </div>
+                          <span className="px-2 py-0.5 rounded bg-amber-100 text-[#D4A843] text-[9px] font-extrabold font-mono uppercase">
+                            Draft Status
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-3 pt-1">
+                          <button
+                            onClick={handleContinueDraft}
+                            className="px-4 py-1.5 bg-[#1B8A3F] hover:bg-[#156e31] text-white text-[10px] font-extrabold rounded-lg transition-all flex items-center gap-1 shadow-sm"
+                          >
+                            <Play className="h-3 w-3 fill-white" />
+                            Continue Draft Form
+                          </button>
+                          <button
+                            onClick={handleDiscardDraft}
+                            className="px-4 py-1.5 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 text-[10px] font-extrabold rounded-lg transition-all flex items-center gap-1"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Discard Draft
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SUBMITTED APPLICATIONS LIST */}
+                    <div className="space-y-4">
+                      {applications.length === 0 ? (
+                        <div className="text-center py-12 border border-dashed border-slate-200 rounded-3xl space-y-4 bg-slate-50/40">
+                          <FileText className="h-10 w-10 text-slate-300 mx-auto" />
+                          <div>
+                            <p className="text-xs font-bold text-slate-700">No active applications submitted yet</p>
+                            <p className="text-[11px] text-slate-400 mt-1 max-w-sm mx-auto leading-normal">
+                              Browse premium DHA & Clifton rental properties, shortlist your favorite, and launch the 13-section verification wizard.
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setShowStartNewSelector(true)}
+                            className="px-4 py-2 bg-[#1B8A3F] hover:bg-[#156e31] text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+                          >
+                            Browse &amp; Start Form
+                          </button>
+                        </div>
+                      ) : (
+                        applications.map((app) => {
+                          const isApproved = app.status === "Approved";
+                          const isRejected = app.status === "Rejected";
+                          
+                          return (
+                            <div key={app.id} className={`border rounded-2xl p-5 space-y-5 shadow-sm transition-all ${
+                              isApproved ? "border-emerald-200 bg-emerald-50/5" : isRejected ? "border-rose-200 bg-rose-50/5" : "border-slate-100 bg-white"
+                            }`}>
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                <div className="flex items-center gap-3">
+                                  <div className={`p-2 rounded-xl ${isApproved ? "bg-emerald-100 text-emerald-600" : isRejected ? "bg-rose-100 text-rose-600" : "bg-blue-100 text-blue-600"}`}>
+                                    <Building className="h-5 w-5" />
+                                  </div>
+                                  <div>
+                                    <h4 className="text-xs font-bold text-slate-900">{app.propertyName}</h4>
+                                    <span className="text-[10px] text-slate-500 block">
+                                      Manager: {app.managerName} &bull; ID: <span className="font-mono font-bold text-slate-700">{app.id}</span>
+                                    </span>
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center gap-3">
+                                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                                    isApproved 
+                                      ? "bg-emerald-50 border-emerald-100 text-emerald-600" 
+                                      : isRejected 
+                                      ? "bg-rose-50 border-rose-100 text-rose-600" 
+                                      : "bg-blue-50 border-blue-100 text-blue-600"
+                                  }`}>
+                                    {app.status}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-slate-600 bg-slate-200/50 px-2 py-1 rounded">Rent: {formatPKR(app.price)}/mo</span>
+                                </div>
+                              </div>
+
+                              {/* CONDITIONAL DECISION BANNERS */}
+                              {isApproved && (
+                                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3.5 text-xs text-emerald-800 space-y-2">
+                                  <div className="flex items-center gap-2 font-bold">
+                                    <CheckCircle className="h-4 w-4 text-emerald-600" />
+                                    Application Status: Approved &bull; Lease Active!
+                                  </div>
+                                  <p className="text-[11px] leading-relaxed font-light">
+                                    Congratulations! Your 13-section rental application was thoroughly reviewed by our licensing agents and approved. The digital tenancy agreement has been executed and deposited into your vault.
+                                  </p>
+                                  <button
+                                    onClick={() => setActiveTab("documents")}
+                                    className="mt-1.5 px-3 py-1 bg-[#1B8A3F] hover:bg-[#156e31] text-white text-[10px] font-extrabold rounded-lg transition-all"
+                                  >
+                                    View &amp; Sign Lease Agreement
+                                  </button>
+                                </div>
+                              )}
+
+                              {isRejected && (
+                                <div className="bg-rose-50 border border-rose-100 rounded-xl p-3.5 text-xs text-rose-800 space-y-1">
+                                  <div className="flex items-center gap-2 font-bold">
+                                    <AlertCircle className="h-4 w-4 text-rose-600" />
+                                    Application Status: Rejected
+                                  </div>
+                                  <p className="text-[11px] leading-relaxed font-light">
+                                    We regret to inform you that your rental application did not meet our verification criteria at this time. This may be due to credit history, document verification anomalies, or other internal bylaws. Please contact the property manager or browse other listings.
+                                  </p>
+                                </div>
+                              )}
+
+                              {/* Progress Timeline */}
+                              <div className="space-y-3">
+                                <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold">
+                                  <span>Verification Pipeline Progress</span>
+                                  <span>{app.progress}% Completed</span>
+                                </div>
+                                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                                  <div className="h-full bg-emerald-600 rounded-full transition-all duration-500" style={{ width: `${app.progress}%` }} />
+                                </div>
+                              </div>
+
+                              {/* Stages Grid */}
+                              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
+                                {[
+                                  { label: "Submitted", desc: "13-Step form data stored in database", done: app.progress >= 20 },
+                                  { label: "Identity Verified", desc: "CNIC verification cleared by NADRA", done: app.progress >= 40 },
+                                  { label: "Reference Check", desc: "Previous landlord & employment check ok", done: app.progress >= 60 },
+                                  { label: "Owner Approved", desc: "Lease conditions approved by owner", done: app.progress >= 80 },
+                                  { label: "Contract Signed", desc: "DocuSign finalized & S3 sync", done: app.progress >= 100 }
+                                ].map((step, sIdx) => (
+                                  <div key={sIdx} className={`p-2.5 border rounded-xl space-y-1 transition-all ${
+                                    step.done ? "bg-emerald-50/20 border-emerald-100 text-slate-800" : "bg-slate-50/50 border-slate-100 text-slate-400"
+                                  }`}>
+                                    <div className="flex items-center gap-1">
+                                      {step.done ? (
+                                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                      ) : (
+                                        <Clock className="h-3.5 w-3.5 text-slate-300" />
+                                      )}
+                                      <span className="text-[9px] font-bold">{step.label}</span>
+                                    </div>
+                                    <p className="text-[8px] leading-tight font-light">{step.desc}</p>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Quick Actions Footer */}
+                              <div className="border-t border-slate-100 pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div className="flex flex-wrap gap-1.5">
+                                  {Object.entries(app.documents || {}).slice(0, 3).map(([key, name]) => (
+                                    <span key={key} className="inline-flex items-center gap-1 text-[9px] bg-slate-100 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-md font-mono">
+                                      {key.toUpperCase()}
+                                    </span>
+                                  ))}
+                                  {Object.keys(app.documents || {}).length > 3 && (
+                                    <span className="text-[9px] text-slate-400 font-bold px-1 py-0.5">+ {Object.keys(app.documents || {}).length - 3} more</span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => setSelectedAppForView(app)}
+                                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold rounded-lg transition-all"
+                                  >
+                                    View Full Submission
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedConvId("conv-1");
+                                      setActiveTab("messages");
+                                    }}
+                                    className="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 text-[10px] font-bold rounded-lg transition-all"
+                                  >
+                                    Message Manager
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+                
               </div>
             )}
 
@@ -2253,143 +2748,7 @@ Simulated secure AWS S3 download complete!`;
               </div>
             )}
 
-            {/* ALERTS TAB */}
-            {activeTab === "alerts" && (
-              <div className="bg-white border border-slate-100 rounded-3xl p-6 md:p-8 shadow-sm space-y-6">
-                <div className="border-b border-slate-100 pb-4">
-                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Smart Alerts &amp; Automation Preferences</h3>
-                  <p className="text-xs text-slate-500">Configure silent windows, trigger budgets, and channels for matching properties.</p>
-                </div>
 
-                <div className="space-y-6 text-xs max-w-2xl">
-                  {/* Quiet Hours */}
-                  <div className="bg-slate-50 p-5 rounded-2xl space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Moon className="h-5 w-5 text-indigo-500" />
-                        <div>
-                          <span className="font-bold text-slate-800 block">Quiet Hours Mode</span>
-                          <span className="text-[10px] text-slate-400">Temporarily silence SMS/WhatsApp notifications on your account</span>
-                        </div>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={alertSettings.quietHours}
-                          onChange={(e) => setAlertSettings(prev => ({ ...prev, quietHours: e.target.checked }))}
-                          className="sr-only peer accent-blue-600"
-                        />
-                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
-                      </label>
-                    </div>
-
-                    {alertSettings.quietHours && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-400 block mb-1">Starts At</label>
-                          <input
-                            type="time"
-                            value={alertSettings.quietStart}
-                            onChange={(e) => setAlertSettings(prev => ({ ...prev, quietStart: e.target.value }))}
-                            className="p-2 border border-slate-200 rounded-lg bg-white w-full"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-400 block mb-1">Ends At</label>
-                          <input
-                            type="time"
-                            value={alertSettings.quietEnd}
-                            onChange={(e) => setAlertSettings(prev => ({ ...prev, quietEnd: e.target.value }))}
-                            className="p-2 border border-slate-200 rounded-lg bg-white w-full"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Pricing trigger criteria */}
-                  <div className="bg-slate-50 p-5 rounded-2xl space-y-4">
-                    <div className="flex items-center gap-2">
-                      <DollarSign className="h-5 w-5 text-emerald-500" />
-                      <div>
-                        <span className="font-bold text-slate-800 block">Smart Filter Match Targets</span>
-                        <span className="text-[10px] text-slate-400">Auto-receive lists when matching rates drop within budget</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 block mb-1">Sectors / Location Alerts</label>
-                        <input
-                          type="text"
-                          value={alertSettings.locationAlerts}
-                          onChange={(e) => setAlertSettings(prev => ({ ...prev, locationAlerts: e.target.value }))}
-                          className="p-2.5 border border-slate-200 rounded-lg bg-white w-full font-semibold text-slate-700"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-400 block mb-1">Min Budget (PKR)</label>
-                          <input
-                            type="number"
-                            value={alertSettings.minPrice}
-                            onChange={(e) => setAlertSettings(prev => ({ ...prev, minPrice: parseInt(e.target.value) || 0 }))}
-                            className="p-2.5 border border-slate-200 rounded-lg bg-white w-full"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-400 block mb-1">Max Budget (PKR)</label>
-                          <input
-                            type="number"
-                            value={alertSettings.maxPrice}
-                            onChange={(e) => setAlertSettings(prev => ({ ...prev, maxPrice: parseInt(e.target.value) || 0 }))}
-                            className="p-2.5 border border-slate-200 rounded-lg bg-white w-full"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Alert Channels */}
-                  <div className="bg-slate-50 p-5 rounded-2xl space-y-4">
-                    <span className="font-bold text-slate-800 block">Communication Dispatch Channels</span>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {[
-                        { key: "email", label: "Email alerts" },
-                        { key: "whatsapp", label: "WhatsApp alerts" },
-                        { key: "sms", label: "SMS Texts" },
-                        { key: "push", label: "In-App Push" }
-                      ].map(chan => (
-                        <label key={chan.key} className="flex items-center gap-2 p-3 bg-white rounded-xl border border-slate-100 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={(alertSettings.channels as any)[chan.key]}
-                            onChange={(e) => setAlertSettings(prev => ({
-                              ...prev,
-                              channels: {
-                                ...prev.channels,
-                                [chan.key]: e.target.checked
-                              }
-                            }))}
-                            className="rounded text-blue-600 focus:ring-blue-500 accent-blue-600"
-                          />
-                          <span className="text-[11px] font-semibold text-slate-700">{chan.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => alert("Alert rules and communication thresholds successfully registered!")}
-                    className="px-5 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-colors"
-                  >
-                    Save Alert Guidelines
-                  </button>
-                </div>
-              </div>
-            )}
 
             {/* PROFILE TAB */}
             {activeTab === "profile" && (
@@ -2459,7 +2818,7 @@ Simulated secure AWS S3 download complete!`;
                   </div>
 
                   <div className="bg-slate-50 p-5 rounded-2xl space-y-4">
-                    <h4 className="text-[11px] font-bold text-slate-700 uppercase">Matchmaking Parameters</h4>
+                    <h4 className="text-[11px] font-bold text-slate-700 uppercase">Preference Parameters</h4>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div>
@@ -2502,991 +2861,6 @@ Simulated secure AWS S3 download complete!`;
                     Update Profile Preferences
                   </button>
                 </form>
-              </div>
-            )}
-
-            {/* RENT & FINANCIALS TAB */}
-            {activeTab === "rent" && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Rent payment Column */}
-                  <div className="lg:col-span-2 bg-white border border-slate-100 rounded-3xl p-6 md:p-8 shadow-sm space-y-6">
-                    <div className="border-b border-slate-100 pb-4 flex justify-between items-center">
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Secured Online Rent Payment</h3>
-                        <p className="text-xs text-slate-500">Submit secure transactions proxying standard Stripe/ACH channels.</p>
-                      </div>
-                      <div className="flex items-center gap-2 px-3 py-1 bg-emerald-50 rounded-full border border-emerald-100">
-                        <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                        <span className="text-[10px] font-bold text-emerald-600 font-mono">256-Bit Encrypted</span>
-                      </div>
-                    </div>
-
-                    {/* Method Tabs */}
-                    <div className="flex gap-2 p-1 bg-slate-100 rounded-xl max-w-xs">
-                      <button
-                        type="button"
-                        onClick={() => setPaymentForm(prev => ({ ...prev, method: "card", successMessage: "", errorMessage: "" }))}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                          paymentForm.method === "card" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
-                        }`}
-                      >
-                        Credit/Debit Card
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPaymentForm(prev => ({ ...prev, method: "ach", successMessage: "", errorMessage: "" }))}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                          paymentForm.method === "ach" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
-                        }`}
-                      >
-                        ACH Bank Transfer
-                      </button>
-                    </div>
-
-                    {/* Form Inputs */}
-                    <div className="space-y-4 text-xs">
-                      {paymentForm.successMessage && (
-                        <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-800 font-semibold flex items-center gap-2">
-                          <CheckCircle className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
-                          <span>{paymentForm.successMessage}</span>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-400 block mb-1">Rent Amount to Pay (PKR)</label>
-                          <div className="relative">
-                            <span className="absolute left-3 top-2.5 text-slate-400 font-bold font-mono">PKR</span>
-                            <input
-                              type="number"
-                              value={paymentForm.amount}
-                              onChange={(e) => setPaymentForm(prev => ({ ...prev, amount: e.target.value }))}
-                              className="pl-12 pr-4 py-2.5 border border-slate-200 rounded-lg bg-white w-full font-bold text-slate-800"
-                            />
-                          </div>
-                        </div>
-
-                        {paymentForm.method === "card" ? (
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-400 block mb-1">Cardholder Name</label>
-                            <input
-                              type="text"
-                              placeholder="Jane Doe"
-                              value={paymentForm.cardName}
-                              onChange={(e) => setPaymentForm(prev => ({ ...prev, cardName: e.target.value }))}
-                              className="p-2.5 border border-slate-200 rounded-lg bg-white w-full font-semibold"
-                            />
-                          </div>
-                        ) : (
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-400 block mb-1">Account Holder Name</label>
-                            <input
-                              type="text"
-                              placeholder="Jane Doe"
-                              value={paymentForm.bankName}
-                              onChange={(e) => setPaymentForm(prev => ({ ...prev, bankName: e.target.value }))}
-                              className="p-2.5 border border-slate-200 rounded-lg bg-white w-full font-semibold"
-                            />
-                          </div>
-                        )}
-                      </div>
-
-                      {paymentForm.method === "card" ? (
-                        <div className="space-y-4 animate-fade-in">
-                          <div className="relative">
-                            <label className="text-[10px] font-bold text-slate-400 block mb-1">Card Number (Stripe Standard)</label>
-                            <div className="relative">
-                              <span className="absolute left-3 top-2.5 text-slate-400">
-                                <CreditCard className="h-4 w-4" />
-                              </span>
-                              <input
-                                type="text"
-                                placeholder="4242 4242 4242 4242"
-                                value={paymentForm.cardNumber}
-                                onChange={(e) => setPaymentForm(prev => ({ ...prev, cardNumber: e.target.value }))}
-                                className="pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg bg-white w-full font-mono text-slate-700 tracking-wider"
-                              />
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <label className="text-[10px] font-bold text-slate-400 block mb-1">Expiry Date</label>
-                              <input
-                                type="text"
-                                placeholder="MM/YY"
-                                value={paymentForm.cardExpiry}
-                                onChange={(e) => setPaymentForm(prev => ({ ...prev, cardExpiry: e.target.value }))}
-                                className="p-2.5 border border-slate-200 rounded-lg bg-white w-full font-mono text-center"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[10px] font-bold text-slate-400 block mb-1">CVC Code</label>
-                              <input
-                                type="password"
-                                maxLength={3}
-                                placeholder="•••"
-                                value={paymentForm.cardCvc}
-                                onChange={(e) => setPaymentForm(prev => ({ ...prev, cardCvc: e.target.value }))}
-                                className="p-2.5 border border-slate-200 rounded-lg bg-white w-full font-mono text-center"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-4 animate-fade-in">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                              <label className="text-[10px] font-bold text-slate-400 block mb-1">ACH Routing Number</label>
-                              <input
-                                type="text"
-                                placeholder="021000021"
-                                value={paymentForm.bankRouting}
-                                onChange={(e) => setPaymentForm(prev => ({ ...prev, bankRouting: e.target.value }))}
-                                className="p-2.5 border border-slate-200 rounded-lg bg-white w-full font-mono"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[10px] font-bold text-slate-400 block mb-1">Bank Account Number</label>
-                              <input
-                                type="text"
-                                placeholder="1234567890"
-                                value={paymentForm.bankAccount}
-                                onChange={(e) => setPaymentForm(prev => ({ ...prev, bankAccount: e.target.value }))}
-                                className="p-2.5 border border-slate-200 rounded-lg bg-white w-full font-mono"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="pt-2 flex items-center justify-between">
-                        <span className="text-[10px] text-slate-400 font-medium">Stripe payments are processed in test sandbox.</span>
-                        <button
-                          type="button"
-                          disabled={paymentForm.isProcessing}
-                          onClick={() => {
-                            setPaymentForm(prev => ({ ...prev, isProcessing: true, successMessage: "", errorMessage: "" }));
-                            setTimeout(() => {
-                              const amountNum = parseInt(paymentForm.amount) || 150000;
-                              const txnId = `TXN-${Math.floor(Math.random() * 9000 + 1000)}`;
-                              const dateStr = new Date().toISOString().split("T")[0];
-                              const methodStr = paymentForm.method === "card" 
-                                ? `Simulated Stripe Card (•••• ${paymentForm.cardNumber.slice(-4) || "4242"})` 
-                                : `Simulated ACH Bank Transfer (•••• ${paymentForm.bankAccount.slice(-4) || "8901"})`;
-                              
-                              setRentPayments(prev => [
-                                {
-                                  id: txnId,
-                                  date: dateStr,
-                                  amount: amountNum,
-                                  status: "Successful",
-                                  propertyName: "Oakridge Premium Family Villa",
-                                  method: methodStr,
-                                  receiptName: `Receipt_${dateStr}.txt`
-                                },
-                                ...prev
-                              ]);
-
-                              setPaymentForm(prev => ({
-                                ...prev,
-                                isProcessing: false,
-                                cardNumber: "",
-                                cardExpiry: "",
-                                cardCvc: "",
-                                bankAccount: "",
-                                bankRouting: "",
-                                successMessage: `Secure payment of ${formatPKR(amountNum)} successfully completed! Transaction Ref: ${txnId}`
-                              }));
-
-                              triggerPush(
-                                "Payment Successful", 
-                                `Your transaction of ${formatPKR(amountNum)} has been processed. Download your receipt below.`, 
-                                "credit-card"
-                              );
-                            }, 2000);
-                          }}
-                          className="px-6 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 text-white rounded-xl font-bold flex items-center gap-2 transition-all shadow-md shadow-blue-600/10"
-                        >
-                          {paymentForm.isProcessing ? (
-                            <>
-                              <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                              </svg>
-                              <span>Clearing via Stripe...</span>
-                            </>
-                          ) : (
-                            <>
-                              <CreditCard className="h-4.5 w-4.5" />
-                              <span>{paymentForm.method === "card" ? "Pay securely via Stripe" : "Initiate ACH Draft Payment"}</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Sidebar Autopay + Credit Bureau column */}
-                  <div className="space-y-6">
-                    {/* Autopay Control Card */}
-                    <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Activity className="h-5 w-5 text-blue-600" />
-                          <div>
-                            <span className="font-bold text-slate-800 text-xs block">Set up Autopay</span>
-                            <span className="text-[9px] text-slate-400">Monthly auto-withdrawals</span>
-                          </div>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={autopaySetup.active}
-                            onChange={(e) => {
-                              const activeState = e.target.checked;
-                              setAutopaySetup(prev => ({ ...prev, active: activeState }));
-                              triggerPush(
-                                activeState ? "Autopay Enabled" : "Autopay Disabled",
-                                activeState 
-                                  ? "Your monthly rent will be automatically drawn on the 1st of every month." 
-                                  : "Automatic draft cancelled. Please pay manually to avoid late fees.",
-                                "bell"
-                              );
-                            }}
-                            className="sr-only peer"
-                          />
-                          <div className="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600" />
-                        </label>
-                      </div>
-
-                      {autopaySetup.active && (
-                        <div className="bg-slate-50 p-3 rounded-xl space-y-2 text-[10px] animate-fade-in">
-                          <div className="flex justify-between text-slate-500 font-semibold">
-                            <span>Draft Frequency:</span>
-                            <span className="text-slate-800">{autopaySetup.frequency}</span>
-                          </div>
-                          <div className="flex justify-between text-slate-500 font-semibold">
-                            <span>Draft Amount:</span>
-                            <span className="text-slate-800 font-bold">{formatPKR(autopaySetup.amount)}</span>
-                          </div>
-                          <div className="flex justify-between text-slate-500 font-semibold">
-                            <span>Next Billing Date:</span>
-                            <span className="text-blue-600 font-extrabold">{autopaySetup.nextBillingDate}</span>
-                          </div>
-                        </div>
-                      )}
-                      <p className="text-[10px] text-slate-400 leading-normal">
-                        Funds are safely debited 2 days prior to lease deadline to guarantee on-time marks on your tenant account.
-                      </p>
-                    </div>
-
-                    {/* Credit Bureau Reporting Card */}
-                    <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white border border-indigo-950 rounded-3xl p-5 shadow-sm space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <UserCheck className="h-5 w-5 text-indigo-400" />
-                          <div>
-                            <span className="font-bold text-xs text-white block">Experian RentBureau</span>
-                            <span className="text-[9px] text-indigo-300">Credit Score Builder</span>
-                          </div>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={creditBureauReporting}
-                            onChange={(e) => {
-                              const checkedState = e.target.checked;
-                              setCreditBureauReporting(checkedState);
-                              triggerPush(
-                                checkedState ? "Credit Reporting On" : "Credit Reporting Suspended",
-                                checkedState 
-                                  ? "Monthly payments are now securely exported to Experian RentBureau database."
-                                  : "Rent bureau logging paused.",
-                                "shield-check"
-                              );
-                            }}
-                            className="sr-only peer"
-                          />
-                          <div className="w-9 h-5 bg-indigo-950 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500" />
-                        </label>
-                      </div>
-                      <p className="text-[10px] text-indigo-200 leading-normal">
-                        Reporting your on-time payments to major credit bureaus. Tenants in DHA sectors recorded an average **+24 points boost** on FICO scores in 6 months!
-                      </p>
-                      {creditBureauReporting && (
-                        <div className="bg-indigo-950/50 px-2.5 py-1.5 rounded-lg border border-indigo-800/40 text-[9px] text-indigo-300 font-bold flex justify-between items-center animate-pulse">
-                          <span>Status: Reporting Active</span>
-                          <span className="text-emerald-400 font-mono font-black">+18 PTS LAST MONTH</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Transaction history */}
-                <div className="bg-white border border-slate-100 rounded-3xl p-6 md:p-8 shadow-sm space-y-4">
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3">Transaction History</h3>
-                  <div className="overflow-x-auto text-xs">
-                    <table className="w-full text-left divide-y divide-slate-100">
-                      <thead>
-                        <tr className="text-slate-400 text-[10px] font-bold uppercase">
-                          <th className="py-2.5">Invoice ID</th>
-                          <th className="py-2.5">Date Paid</th>
-                          <th className="py-2.5">Property</th>
-                          <th className="py-2.5">Method</th>
-                          <th className="py-2.5">Rent Amount</th>
-                          <th className="py-2.5 text-center">Receipt</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 text-slate-600 font-semibold">
-                        {rentPayments.map((p) => (
-                          <tr key={p.id} className="hover:bg-slate-50/50">
-                            <td className="py-3 font-mono text-slate-800 font-bold">{p.id}</td>
-                            <td className="py-3">{p.date}</td>
-                            <td className="py-3 text-slate-500 truncate max-w-[150px]">{p.propertyName}</td>
-                            <td className="py-3 text-slate-500">{p.method}</td>
-                            <td className="py-3 text-slate-900 font-bold">{formatPKR(p.amount)}</td>
-                            <td className="py-3 text-center">
-                              <button
-                                onClick={() => downloadReceipt(p)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-[10px] font-bold text-slate-600 rounded-lg transition-colors"
-                              >
-                                <Download className="h-3 w-3" />
-                                <span>PDF Receipt</span>
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* MAINTENANCE MANAGEMENT TAB */}
-            {activeTab === "maintenance" && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Submission form */}
-                  <div className="lg:col-span-2 bg-white border border-slate-100 rounded-3xl p-6 md:p-8 shadow-sm space-y-6">
-                    <div className="border-b border-slate-100 pb-4">
-                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Submit Maintenance Dispatch Request</h3>
-                      <p className="text-xs text-slate-500">Provide details on repair jobs. High-severity issues prompt instant builder paging.</p>
-                    </div>
-
-                    <form 
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (!ticketForm.title.trim() || !ticketForm.description.trim()) return;
-
-                        setTicketForm(prev => ({ ...prev, isSubmitting: true }));
-                        setTimeout(() => {
-                          const ticketId = `TKT-${Math.floor(Math.random() * 800 + 200)}`;
-                          const dateStr = new Date().toISOString().split("T")[0];
-                          
-                          setMaintenanceTickets(prev => [
-                            {
-                              id: ticketId,
-                              title: ticketForm.title,
-                              category: ticketForm.category,
-                              severity: ticketForm.severity,
-                              status: ticketForm.severity === "Emergency" ? "Assigned" : "Submitted",
-                              date: dateStr,
-                              description: ticketForm.description,
-                              attachments: ticketForm.fileNames.length > 0 ? ticketForm.fileNames : ["unspecified_attachment.jpg"]
-                            },
-                            ...prev
-                          ]);
-
-                          if (ticketForm.severity === "Emergency") {
-                            setEmergencyAlertDispatched(true);
-                            setTimeout(() => setEmergencyAlertDispatched(false), 6000);
-                          }
-
-                          setTicketForm({
-                            title: "",
-                            category: "Plumbing",
-                            severity: "Medium",
-                            description: "",
-                            fileNames: [],
-                            isSubmitting: false,
-                            success: true
-                          });
-
-                          triggerPush(
-                            ticketForm.severity === "Emergency" ? "🚨 Emergency SMS Dispatched" : "Maintenance Ticket Logged",
-                            ticketForm.severity === "Emergency" 
-                              ? `SMS texts dispatched to DHA on-call staff. Ticket Ref: ${ticketId}`
-                              : `Your ticket ${ticketId} has been successfully logged.`,
-                            "wrench"
-                          );
-                        }, 1500);
-                      }}
-                      className="space-y-4 text-xs"
-                    >
-                      {ticketForm.success && (
-                        <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-800 font-semibold flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                            <span>Your maintenance request has been submitted to on-call builders!</span>
-                          </div>
-                          <button 
-                            type="button" 
-                            onClick={() => setTicketForm(prev => ({ ...prev, success: false }))}
-                            className="text-slate-400 hover:text-slate-600 font-bold"
-                          >
-                            Close
-                          </button>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div className="sm:col-span-2">
-                          <label className="text-[10px] font-bold text-slate-400 block mb-1">Issue Subject Title</label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="e.g. Master Bedroom Wall AC Leaking"
-                            value={ticketForm.title}
-                            onChange={(e) => setTicketForm(prev => ({ ...prev, title: e.target.value }))}
-                            className="p-2.5 border border-slate-200 rounded-lg bg-white w-full font-semibold"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-400 block mb-1">Job Category</label>
-                          <select
-                            value={ticketForm.category}
-                            onChange={(e) => setTicketForm(prev => ({ ...prev, category: e.target.value }))}
-                            className="p-2.5 border border-slate-200 rounded-lg bg-white w-full font-semibold text-slate-700"
-                          >
-                            <option value="Plumbing">Plumbing</option>
-                            <option value="Electrical">Electrical</option>
-                            <option value="HVAC">HVAC / Cooling</option>
-                            <option value="Appliance">Appliances</option>
-                            <option value="Pest Control">Pest Control</option>
-                            <option value="Structural">Structural / Walls</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 block mb-1">Severity &amp; Priority Level</label>
-                        <div className="grid grid-cols-4 gap-2">
-                          {[
-                            { key: "Low", desc: "Routine maintenance", color: "hover:border-slate-300 peer-checked:border-slate-500 peer-checked:bg-slate-50" },
-                            { key: "Medium", desc: "Attention needed", color: "hover:border-blue-300 peer-checked:border-blue-500 peer-checked:bg-blue-50/50" },
-                            { key: "High", desc: "Urgent fix required", color: "hover:border-amber-300 peer-checked:border-amber-500 peer-checked:bg-amber-50/50" },
-                            { key: "Emergency", desc: "⚠️ SMS Dispatch alert", color: "hover:border-rose-400 peer-checked:border-rose-500 peer-checked:bg-rose-50/50 text-rose-800" }
-                          ].map((sev) => (
-                            <label key={sev.key} className="relative cursor-pointer">
-                              <input
-                                type="radio"
-                                name="severity"
-                                value={sev.key}
-                                checked={ticketForm.severity === sev.key}
-                                onChange={() => setTicketForm(prev => ({ ...prev, severity: sev.key }))}
-                                className="sr-only peer"
-                              />
-                              <div className={`p-2.5 border border-slate-200 rounded-xl text-center space-y-0.5 transition-all h-full flex flex-col justify-center ${sev.color}`}>
-                                <span className="font-bold text-[11px] block">{sev.key}</span>
-                                <span className="text-[8px] text-slate-400 font-normal leading-tight">{sev.desc}</span>
-                              </div>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-
-                      {ticketForm.severity === "Emergency" && (
-                        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-900 rounded-xl leading-relaxed animate-pulse">
-                          <p className="font-extrabold text-[10px] flex items-center gap-1">
-                            <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
-                            EMERGENCY SMS DISPATCH AGREEMENT ACTIVE
-                          </p>
-                          <p className="text-[9px] font-normal text-rose-700 mt-1">
-                            Submitting as Emergency immediately pages and dispatches automated SMS texts to our 24/7 on-call engineering squad. False trigger of Emergency dispatch for simple minor non-emergency repairs will result in 2,500 PKR administration inconvenience charge on the next ledger cycle.
-                          </p>
-                        </div>
-                      )}
-
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 block mb-1">Issue Details &amp; Location Specifics</label>
-                        <textarea
-                          rows={3}
-                          required
-                          placeholder="Describe the exact issue, which room, leak locations, or noises, and when it started..."
-                          value={ticketForm.description}
-                          onChange={(e) => setTicketForm(prev => ({ ...prev, description: e.target.value }))}
-                          className="p-2.5 border border-slate-200 rounded-lg bg-white w-full text-xs font-medium"
-                        />
-                      </div>
-
-                      {/* Photo/Video Attachment upload */}
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 block mb-1">Photo/Video Evidence Attachments</label>
-                        <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center hover:bg-slate-50 cursor-pointer relative">
-                          <input
-                            type="file"
-                            multiple
-                            accept="image/*,video/*"
-                            onChange={(e) => {
-                              const files = e.target.files;
-                              if (files && files.length > 0) {
-                                const names: string[] = [];
-                                for (let i = 0; i < files.length; i++) {
-                                  names.push(files[i].name);
-                                }
-                                setTicketForm(prev => ({ ...prev, fileNames: [...prev.fileNames, ...names] }));
-                                triggerPush("File Attached", `Attached ${names.length} file(s) for verification.`, "paperclip");
-                              }
-                            }}
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                          />
-                          <Upload className="h-6 w-6 text-slate-400 mx-auto mb-1" />
-                          <span className="text-[10px] font-bold text-slate-500 block">Drag and drop file or click to choose from camera roll</span>
-                          <span className="text-[8px] text-slate-400">Supports JPG, PNG, MP4 up to 25MB</span>
-                        </div>
-
-                        {ticketForm.fileNames.length > 0 && (
-                          <div className="mt-2.5 flex flex-wrap gap-1.5">
-                            {ticketForm.fileNames.map((name, index) => (
-                              <span key={index} className="inline-flex items-center gap-1.5 px-2 py-1 bg-slate-100 border border-slate-200 rounded text-[9px] text-slate-600 font-bold">
-                                <span>{name}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => setTicketForm(prev => ({ ...prev, fileNames: prev.fileNames.filter((_, i) => i !== index) }))}
-                                  className="text-rose-500 hover:text-rose-700 text-[10px] font-extrabold"
-                                >
-                                  &times;
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={ticketForm.isSubmitting}
-                        className="w-full text-center py-3 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
-                      >
-                        {ticketForm.isSubmitting ? "Logging Dispatch Order..." : "Submit Maintenance Dispatch"}
-                      </button>
-                    </form>
-                  </div>
-
-                  {/* Sidebar tickets tracking Column */}
-                  <div className="space-y-6">
-                    {/* SMS dispatched notification block */}
-                    {emergencyAlertDispatched && (
-                      <div className="bg-rose-500 text-white p-4 rounded-3xl space-y-2.5 shadow-lg border border-rose-600 animate-bounce">
-                        <div className="flex items-start gap-2.5">
-                          <Smartphone className="h-5 w-5 text-white animate-pulse" />
-                          <div>
-                            <span className="font-bold text-xs block">🚨 Emergency Alert Active</span>
-                            <span className="text-[10px] text-rose-100 leading-normal block">
-                              Automated SMS dispatch dispatch orders has been SMS blasted to Gated Avenue 24/7 plumbers! Response average: 14 mins.
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Active Tickets Tracker */}
-                    <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-4">
-                      <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3">Active Tickets Tracker</h3>
-                      
-                      <div className="space-y-4 divide-y divide-slate-100/60 text-xs">
-                        {maintenanceTickets.map((t) => (
-                          <div key={t.id} className="pt-3 first:pt-0 space-y-2.5">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <span className="text-[8px] font-mono text-slate-400 block">{t.id} &bull; Received {t.date}</span>
-                                <h4 className="font-bold text-slate-900 mt-0.5">{t.title}</h4>
-                              </div>
-                              <span className={`px-2 py-0.5 rounded-full text-[8px] font-extrabold uppercase ${
-                                t.status === "Completed" ? "bg-emerald-100 text-emerald-800" :
-                                t.status === "In Progress" ? "bg-cyan-100 text-cyan-800" : "bg-amber-100 text-amber-800"
-                              }`}>
-                                {t.status}
-                              </span>
-                            </div>
-
-                            <p className="text-[10px] text-slate-500 leading-normal font-medium">{t.description}</p>
-
-                            {/* Ticket Status Pipeline indicator */}
-                            <div className="space-y-1.5">
-                              <div className="flex justify-between items-center text-[8px] font-mono text-slate-400 font-bold">
-                                <span>Dispatch Step</span>
-                                <span>{
-                                  t.status === "Submitted" ? "1/4: Submitted" :
-                                  t.status === "Assigned" ? "2/4: Builder Assigned" :
-                                  t.status === "In Progress" ? "3/4: Technicians Onsite" : "4/4: Job Certified"
-                                }</span>
-                              </div>
-                              <div className="grid grid-cols-4 gap-1">
-                                {[
-                                  { label: "Sub", active: true },
-                                  { label: "Ass", active: t.status === "Assigned" || t.status === "In Progress" || t.status === "Completed" },
-                                  { label: "Prog", active: t.status === "In Progress" || t.status === "Completed" },
-                                  { label: "Comp", active: t.status === "Completed" }
-                                ].map((step, sIdx) => (
-                                  <div 
-                                    key={sIdx} 
-                                    className={`h-1.5 rounded-full ${step.active ? "bg-cyan-500" : "bg-slate-100"}`} 
-                                    title={step.label}
-                                  />
-                                ))}
-                              </div>
-                            </div>
-
-                            {t.attachments && t.attachments.length > 0 && (
-                              <div className="flex gap-1">
-                                {t.attachments.map((file, fIdx) => (
-                                  <span key={fIdx} className="text-[8px] px-1.5 py-0.5 bg-slate-100 border border-slate-200 text-slate-400 rounded truncate max-w-[120px]">
-                                    📎 {file}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* DOCUMENT MANAGEMENT TAB */}
-            {activeTab === "documents" && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Document table repository */}
-                  <div className="lg:col-span-2 bg-white border border-slate-100 rounded-3xl p-6 md:p-8 shadow-sm space-y-6">
-                    <div className="border-b border-slate-100 pb-4 flex justify-between items-center">
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">AWS S3 Cloud Document Vault</h3>
-                        <p className="text-xs text-slate-500">Securely backup, audit, and sign critical lease documentation from any device.</p>
-                      </div>
-                      <span className="px-3 py-1 bg-blue-50 text-[10px] font-bold text-blue-600 rounded-full border border-blue-100 font-mono">
-                        S3 Bucket: proplog-vault-prod
-                      </span>
-                    </div>
-
-                    <div className="overflow-x-auto text-xs">
-                      <table className="w-full text-left divide-y divide-slate-100">
-                        <thead>
-                          <tr className="text-slate-400 text-[10px] font-bold uppercase">
-                            <th className="py-2.5">Document Name</th>
-                            <th className="py-2.5">Storage Key</th>
-                            <th className="py-2.5">File Size</th>
-                            <th className="py-2.5">E-Sign Status</th>
-                            <th className="py-2.5 text-center">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 text-slate-600 font-semibold">
-                          {tenantDocuments.map((doc) => (
-                            <tr key={doc.id} className="hover:bg-slate-50/50">
-                              <td className="py-3.5">
-                                <div className="flex items-center gap-2">
-                                  <BookOpen className="h-4 w-4 text-indigo-500 shrink-0" />
-                                  <div>
-                                    <span className="font-bold text-slate-800 block">{doc.name}</span>
-                                    <span className="text-[9px] text-slate-400">{doc.type}</span>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="py-3.5 font-mono text-[9px] text-slate-400 truncate max-w-[120px]" title={doc.storage}>
-                                {doc.storage}
-                              </td>
-                              <td className="py-3.5 text-slate-500">{doc.size}</td>
-                              <td className="py-3.5">
-                                {doc.signed ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-bold rounded-full">
-                                    <Check className="h-3 w-3" /> Signed &amp; Safe
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-bold rounded-full animate-pulse">
-                                    <PenTool className="h-3 w-3" /> E-Signature Required
-                                  </span>
-                                )}
-                              </td>
-                              <td className="py-3.5 text-center">
-                                {doc.signed ? (
-                                  <button
-                                    onClick={() => {
-                                      alert(`Initiating secure backup stream for ${doc.name} from AWS S3...`);
-                                    }}
-                                    className="px-3 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-[10px] text-slate-600 font-bold rounded-lg transition-colors inline-flex items-center gap-1"
-                                  >
-                                    <Download className="h-3 w-3" />
-                                    <span>Download</span>
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() => {
-                                      setSignName(profileData.fullName);
-                                      setSignTypedText(profileData.fullName);
-                                      setSignConsent(false);
-                                      setSignModalOpen(true);
-                                    }}
-                                    className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold rounded-lg transition-all inline-flex items-center gap-1 shadow-sm"
-                                  >
-                                    <PenTool className="h-3 w-3" />
-                                    <span>Sign Contract</span>
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {/* Document Uploader Sidebar */}
-                  <div className="space-y-6">
-                    <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-4">
-                      <div className="border-b border-slate-100 pb-3 flex items-center gap-1.5">
-                        <Upload className="h-4.5 w-4.5 text-indigo-500" />
-                        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Upload New Document</h3>
-                      </div>
-
-                      {docUploadState.isUploading ? (
-                        <div className="space-y-3 p-4 bg-indigo-50/50 rounded-xl border border-indigo-100 text-xs animate-pulse">
-                          <div className="flex justify-between font-bold text-indigo-900 text-[10px]">
-                            <span>Uploading: {docUploadState.fileName}</span>
-                            <span>{docUploadState.progress}%</span>
-                          </div>
-                          <div className="h-1.5 w-full bg-indigo-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-indigo-600 rounded-full transition-all duration-300" style={{ width: `${docUploadState.progress}%` }} />
-                          </div>
-                          <p className="text-[9px] text-indigo-400">Storing in AES-256 secure S3 buckets...</p>
-                        </div>
-                      ) : (
-                        <form
-                          onSubmit={(e) => {
-                            e.preventDefault();
-                            const form = e.target as HTMLFormElement;
-                            const fileInput = form.elements.namedItem("docFile") as HTMLInputElement;
-                            const files = fileInput.files;
-                            if (!files || files.length === 0) return;
-
-                            const attachedFile = files[0];
-                            setDocUploadState({
-                              isUploading: true,
-                              fileName: attachedFile.name,
-                              progress: 10,
-                              type: docUploadState.type
-                            });
-
-                            // Simulate progressive S3 stream upload
-                            let currentProgress = 10;
-                            const interval = setInterval(() => {
-                              currentProgress += 30;
-                              if (currentProgress >= 100) {
-                                currentProgress = 100;
-                                clearInterval(interval);
-
-                                setTenantDocuments(prev => [
-                                  ...prev,
-                                  {
-                                    id: `doc-${Date.now()}`,
-                                    name: attachedFile.name,
-                                    type: docUploadState.type,
-                                    storage: `s3://proplog-tenant-vault-production/${attachedFile.name.toLowerCase().replace(/\s+/g, "_")}`,
-                                    signed: true, // uploaded document is signed
-                                    dateAdded: new Date().toISOString().split("T")[0],
-                                    size: `${(attachedFile.size / (1024 * 1024)).toFixed(1)} MB`
-                                  }
-                                ]);
-
-                                setDocUploadState({
-                                  isUploading: false,
-                                  fileName: "",
-                                  progress: 0,
-                                  type: "Insurance Certificate"
-                                });
-
-                                form.reset();
-                                triggerPush("Document Archived", `${attachedFile.name} successfully encrypted & stored on S3.`, "upload");
-                              } else {
-                                setDocUploadState(prev => ({ ...prev, progress: currentProgress }));
-                              }
-                            }, 500);
-                          }}
-                          className="space-y-4 text-xs"
-                        >
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-400 block mb-1">Document Category</label>
-                            <select
-                              value={docUploadState.type}
-                              onChange={(e) => setDocUploadState(prev => ({ ...prev, type: e.target.value }))}
-                              className="p-2 border border-slate-200 bg-white rounded-lg w-full font-semibold text-slate-700"
-                            >
-                              <option value="Insurance Certificate">Renters Insurance Policy</option>
-                              <option value="Inspection Report">Inspection / Move-in report</option>
-                              <option value="ID Verification">ID CNIC / Driving License scan</option>
-                              <option value="Utility Ledger">Utility Ledger bills</option>
-                            </select>
-                          </div>
-
-                          <div className="relative border-2 border-dashed border-slate-200 rounded-xl p-4 text-center hover:bg-slate-50 cursor-pointer">
-                            <input
-                              type="file"
-                              name="docFile"
-                              required
-                              accept=".pdf,.png,.jpg,.jpeg"
-                              onChange={(e) => {
-                                const files = e.target.files;
-                                if (files && files.length > 0) {
-                                  triggerPush("File Selected", `Attached document ${files[0].name} for upload.`);
-                                }
-                              }}
-                              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                            />
-                            <Upload className="h-6 w-6 text-slate-400 mx-auto mb-1" />
-                            <span className="text-[10px] font-bold text-slate-500 block">Drag &amp; Drop or Browse</span>
-                            <span className="text-[8px] text-slate-400">PDF, JPG, PNG up to 10MB</span>
-                          </div>
-
-                          <button
-                            type="submit"
-                            className="w-full text-center py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[10px] font-bold shadow-sm transition-colors"
-                          >
-                            Upload to AWS Vault
-                          </button>
-                        </form>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* DOCUSIGN INTERACTIVE e-SIGN OVERLAY MODAL */}
-                {signModalOpen && (
-                  <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
-                    <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-100 flex flex-col justify-between max-h-[90vh]">
-                      {/* Brand Header */}
-                      <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center border-b border-slate-800 shrink-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] px-2 py-0.5 bg-yellow-500 text-slate-950 font-black rounded font-mono">DocuSign PRO</span>
-                          <span className="text-xs font-bold font-mono tracking-tight text-slate-100">REVIEW &amp; ELECTRONICALLY SIGN AGREEMENT</span>
-                        </div>
-                        <button
-                          onClick={() => setSignModalOpen(false)}
-                          className="text-slate-400 hover:text-white font-extrabold text-lg leading-none"
-                        >
-                          &times;
-                        </button>
-                      </div>
-
-                      {/* Content view window */}
-                      <div className="p-6 overflow-y-auto space-y-4 text-slate-700 text-xs leading-relaxed max-h-[350px]">
-                        <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 text-[10px] text-amber-900 flex items-start gap-2">
-                          <AlertCircle className="h-4.5 w-4.5 text-amber-600 shrink-0 mt-0.5" />
-                          <span>Please read and review the lease covenants carefully. Scroll to the bottom to authorize signing.</span>
-                        </div>
-
-                        <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 font-serif text-[10px] space-y-3 shadow-inner">
-                          <h4 className="font-sans font-bold text-center text-slate-900 text-xs border-b border-slate-200 pb-2">RESIDENTIAL LEASE MUTUAL COVENANTS</h4>
-                          <p><strong>LEASE TERM &amp; PREMISES:</strong> This Agreement is entered into this 21st day of June 2026, by and between the Landlord <em>Kamran Shah</em> and Tenant <em>{profileData.fullName}</em>. Landlord hereby leases to Tenant the premises known as: <strong>Oakridge Premium Family Villa, Block B, DHA, Lahore</strong>.</p>
-                          <p><strong>RENTAL AMOUNT:</strong> Tenant covenants to pay Landlord a monthly rent of <strong>{formatPKR(150000)}</strong>, payable in advance on or before the first (1st) day of each calendar month. Payments made via credit card, wire transfer, or ACH are subject to bank validation clearings.</p>
-                          <p><strong>SECURITY DEPOSIT:</strong> Tenant agrees to deposit with Landlord the sum of 150,000 PKR as security for any damages caused during occupancy. Deposit is strictly refundable within thirty (30) days of move-out clearance and inspection report authorization.</p>
-                          <p><strong>UTILITIES &amp; LEVIES:</strong> Tenant is strictly responsible for monthly gas, electricity, water, and society garbage collection levy bills. Hybrid solar inverter system must be maintained in good working condition.</p>
-                          <p className="text-slate-400 border-t border-dashed border-slate-200 pt-2 text-[9px] text-center">**END OF DOCUMENT HIGHLIGHTS - SECURED BY DOCUSIGN ENCRYPTION SERVICES**</p>
-                        </div>
-                      </div>
-
-                      {/* Autorotation / Signature input form */}
-                      <div className="p-6 bg-slate-50 border-t border-slate-100 shrink-0 space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-400 block mb-1">Type Full Name for Signature</label>
-                            <input
-                              type="text"
-                              required
-                              value={signName}
-                              onChange={(e) => {
-                                setSignName(e.target.value);
-                                setSignTypedText(e.target.value);
-                              }}
-                              className="p-2.5 border border-slate-200 bg-white rounded-lg text-xs w-full font-semibold"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-400 block mb-1">Calligraphy Signature Style</label>
-                            <div className="p-2.5 bg-white border border-slate-200 rounded-lg text-center font-serif text-lg text-blue-700 select-none italic font-bold">
-                              {signTypedText || "Jane Doe"}
-                            </div>
-                          </div>
-                        </div>
-
-                        <label className="flex items-start gap-2.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={signConsent}
-                            onChange={(e) => setSignConsent(e.target.checked)}
-                            className="rounded text-blue-600 focus:ring-blue-500 accent-blue-600 mt-0.5"
-                          />
-                          <span className="text-[10px] text-slate-500 leading-normal font-medium">
-                            I agree that this calligraphy signature is a legally binding equivalent of my handwritten signature under global Electronic Transactions legislation (ETA) and is archived securely on AWS S3 vaults.
-                          </span>
-                        </label>
-
-                        <div className="flex gap-2 justify-end">
-                          <button
-                            type="button"
-                            onClick={() => setSignModalOpen(false)}
-                            className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition-all"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            disabled={!signConsent || !signName.trim() || isSigningProcess}
-                            onClick={() => {
-                              setIsSigningProcess(true);
-                              setTimeout(() => {
-                                setTenantDocuments(prev => prev.map(d => {
-                                  if (d.id === "doc-1") {
-                                    return { ...d, signed: true };
-                                  }
-                                  return d;
-                                }));
-                                setIsSigningProcess(false);
-                                setSignModalOpen(false);
-                                triggerPush(
-                                  "Contract E-Signed",
-                                  "Residential Lease Agreement has been digitally signed using DocuSign and archived to AWS S3.",
-                                  "pen-tool"
-                                );
-                              }, 1800);
-                            }}
-                            className="px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-1.5 transition-all"
-                          >
-                            {isSigningProcess ? (
-                              <>
-                                <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                </svg>
-                                <span>Hashing and Sealing...</span>
-                              </>
-                            ) : (
-                              <>
-                                <CheckCircle className="h-4.5 w-4.5" />
-                                <span>Adopt and Sign Contract</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
           </>

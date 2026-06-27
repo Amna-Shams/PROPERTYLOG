@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from "react";
-import { Building2, Menu, X, Globe, LogIn } from "lucide-react";
+import { Building2, Menu, X, Globe, LogIn, ArrowLeft } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -37,16 +37,24 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, setCurrentPath }) =
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo */}
-        <div 
-          onClick={() => handleNavClick("/")} 
-          className="flex cursor-pointer items-center gap-2"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md shadow-slate-900/10 transition-transform hover:scale-105">
-            <Building2 className="h-5 w-5" />
+        <div className="flex items-center">
+          <button
+            onClick={() => window.history.back()}
+            className="flex items-center gap-1.5 px-2 py-2 text-sm font-semibold text-slate-500 hover:text-slate-900 rounded-lg transition-colors mr-2 md:mr-4"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <div 
+            onClick={() => handleNavClick("/")} 
+            className="flex cursor-pointer items-center gap-2"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md shadow-slate-900/10 transition-transform hover:scale-105">
+              <Building2 className="h-5 w-5" />
+            </div>
+            <span className="font-display text-xl font-bold tracking-tight text-slate-900">
+              PROPERTY<span className="text-blue-600">LOG</span>
+            </span>
           </div>
-          <span className="font-display text-xl font-bold tracking-tight text-slate-900">
-            PROPERTY<span className="text-blue-600">LOG</span>
-          </span>
         </div>
 
         {/* Desktop Nav */}

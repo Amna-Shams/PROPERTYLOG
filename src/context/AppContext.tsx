@@ -37,6 +37,7 @@ import {
   initialNotifications,
   initialTenants
 } from "../data/mockData";
+import { RENTAL_PROPERTIES, RentalProperty } from "../data/rentalProperties";
 
 export interface Toast {
   id: string;
@@ -57,6 +58,7 @@ interface AppContextProps {
   toasts: Toast[];
   tenants: Tenant[];
   applications: Application[];
+  rentalProperties: RentalProperty[];
   
   // Auth Functions
   login: (email: string, role: UserRole) => Promise<boolean>;
@@ -245,6 +247,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem("pl_current_user", currentUser ? JSON.stringify(currentUser) : "");
   }, [currentUser]);
+
+  // Derived dynamic rental properties state (fully synchronized in real-time)
+  const rentalProperties = React.useMemo<RentalProperty[]>(() => {
+    const list = [...RENTAL_PROPERTIES];
+    
+    // Add any property from our dynamic properties state that is not in RENTAL_PROPERTIES
+    properties.forEach((p) => {
+      const alreadyExists = list.some(
+        (rp) => rp.id === p.id || rp.title.toLowerCase() === p.name.toLowerCase()
+      );
+      if (!alreadyExists) {
+        // Find units for this property to set rent
+        const propUnits = units.filter((u) => u.property_id === p.id);
+        const rentAmount = propUnits.length > 0 && propUnits[0].rent_amount
+          ? propUnits[0].rent_amount
+          : p.type === PropertyType.HOUSE ? 250000 : p.type === PropertyType.APARTMENT ? 120000 : 80000;
+        
+        // Check if USD unit rent and scale to PKR if so
+        const finalPrice = rentAmount < 10000 ? rentAmount * 150 : rentAmount;
+
+        list.push({
+          id: p.id,
+          title: p.name,
+          description: p.description || `Excellent ${p.type.toLowerCase()} located at ${p.address}. High-speed connectivity, continuous security, and excellent management.`,
+          property_type: p.type,
+          status: p.status === PropertyStatus.ACTIVE ? 'available' : p.status === PropertyStatus.MAINTENANCE ? 'maintenance' : 'rented',
+          price: finalPrice,
+          currency: "PKR",
+          period: "month",
+          area: p.address.split(',')[0] || p.address,
+          city: p.address.split(',')[1]?.trim() || "Lahore",
+          province: "Punjab",
+          latitude: p.latitude || 31.5204,
+          longitude: p.longitude || 74.3587,
+          street_address: p.address,
+          nearby_places: {
+            schools: ["Nearby Premier School (1.0 km)"],
+            hospitals: ["Nearby Health Clinic (1.5 km)"],
+            markets: ["Central Shopping Market (0.5 km)"],
+            mosques: ["Jamia Mosque (0.3 km)"]
+          },
+          bedrooms: p.type === PropertyType.HOUSE ? 4 : p.type === PropertyType.APARTMENT ? 2 : 1,
+          bathrooms: p.type === PropertyType.HOUSE ? 4 : p.type === PropertyType.APARTMENT ? 2 : 1,
+          area_sqft: p.type === PropertyType.HOUSE ? 2400 : p.type === PropertyType.APARTMENT ? 1200 : 600,
+          parking: 1,
+          amenities: {
+            basic: ["Drawing Room", "Lawn/Garden", "Store Room", "Built-in Wardrobes"],
+            utilities: ["WASA Water Supply", "Sui Gas Supply", "UPS/Inverter Backup"],
+            security: ["24/7 Gated Community Guard", "CCTV Surveillance System"],
+            community: ["Walking/Jogging Track", "Near Central Park"]
+          },
+          images: [p.image_url || "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=600"],
+          furnished: 'semi',
+          available_from: "Immediate",
+          lease_duration: "1 Year Minimum",
+          views: 120,
+          favorites_count: 5,
+          manager_name: "Alex Mercer",
+          manager_phone: "+92 300 1234567",
+          manager_email: "owner@propertylog.com",
+          manager_company: "PropertyLog Premium Listings",
+          created_at: p.created_at,
+          listed_date: p.created_at.split('T')[0]
+        });
+      }
+    });
+    
+    return list;
+  }, [properties, units]);
 
   // Load initial data from Supabase asynchronously on mount
   useEffect(() => {
@@ -1448,6 +1519,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toasts,
         tenants,
         applications,
+        rentalProperties,
         login,
         register,
         logout,

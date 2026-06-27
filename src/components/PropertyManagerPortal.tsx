@@ -46,7 +46,8 @@ import {
   Edit,
   Sliders,
   Eye,
-  FileCheck
+  FileCheck,
+  ArrowLeft
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { formatPKR } from "../utils/currency";
@@ -574,6 +575,9 @@ export const PropertyManagerPortal: React.FC<PropertyManagerPortalProps> = ({ im
           {/* Header */}
           <div className="h-16 flex items-center justify-between px-4 bg-slate-950 border-b border-slate-800">
             <div className="flex items-center gap-2 overflow-hidden">
+              <button onClick={() => window.history.back()} className="p-1 hover:bg-slate-800 rounded text-slate-400">
+                <ArrowLeft className="h-4 w-4" />
+              </button>
               <div className="h-9 w-9 rounded-xl bg-slate-800 text-blue-400 flex items-center justify-center shrink-0 shadow-md">
                 <Briefcase className="h-5 w-5" />
               </div>

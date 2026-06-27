@@ -31,7 +31,8 @@ import {
   Sparkles,
   Inbox,
   LayoutGrid,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ArrowLeft
 } from "lucide-react";
 import { formatPKR } from "../utils/currency";
 import { useApp } from "../context/AppContext";
@@ -488,6 +489,9 @@ export const Dashboard: React.FC = () => {
           {/* Sidebar Brand header */}
           <div className="h-16 flex items-center justify-between px-4 border-b border-slate-800/60 bg-slate-950">
             <div className="flex items-center gap-2 overflow-hidden">
+              <button onClick={() => window.history.back()} className="p-1 hover:bg-slate-800 rounded text-slate-400">
+                <ArrowLeft className="h-4 w-4" />
+              </button>
               <div className="h-9 w-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-blue-600/10">
                 <Building2 className="h-5 w-5" />
               </div>

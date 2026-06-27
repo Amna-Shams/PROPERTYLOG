@@ -64,6 +64,11 @@ function AppContent() {
     window.location.hash = routeName || "home";
   }, [currentPath]);
 
+  // Global scroll to top on path change
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [currentPath]);
+
   // Listen to hash changes for robust routing
   useEffect(() => {
     const handleHashChange = () => {
